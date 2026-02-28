@@ -1,0 +1,1381 @@
+#!/usr/bin/env node
+import {
+  MemoreumAgent,
+  MemoreumClient
+} from "../chunk-KGPFO2HP.mjs";
+
+// src/cli/index.ts
+import { Command } from "commander";
+import chalk8 from "chalk";
+
+// src/cli/commands/config.ts
+import inquirer from "inquirer";
+import chalk2 from "chalk";
+
+// src/cli/config.ts
+import Conf from "conf";
+var config = new Conf({
+  projectName: "memoreum",
+  defaults: {
+    config: {
+      baseUrl: "https://api.memoreum.app",
+      network: "mainnet"
+    },
+    agents: [],
+    currentAgent: null,
+    aiProviders: {}
+  }
+});
+function getConfig() {
+  return config.get("config");
+}
+function setConfig(updates) {
+  const current = getConfig();
+  config.set("config", { ...current, ...updates });
+}
+function getApiKey() {
+  return getConfig().apiKey;
+}
+function setApiKey(apiKey) {
+  setConfig({ apiKey });
+}
+function setBaseUrl(url) {
+  setConfig({ baseUrl: url });
+}
+function setNetwork(network) {
+  setConfig({ network });
+}
+function getAgents() {
+  return config.get("agents");
+}
+function addAgent(agent) {
+  const agents = getAgents();
+  agents.push(agent);
+  config.set("agents", agents);
+}
+function removeAgent(agentId) {
+  const agents = getAgents().filter((a) => a.id !== agentId);
+  config.set("agents", agents);
+}
+function getCurrentAgentId() {
+  return config.get("currentAgent");
+}
+function setCurrentAgent(agentId) {
+  config.set("currentAgent", agentId);
+}
+function getCurrentAgent() {
+  const currentId = getCurrentAgentId();
+  if (!currentId) return null;
+  return getAgents().find((a) => a.id === currentId) || null;
+}
+function getAIProviders() {
+  return config.get("aiProviders");
+}
+function setAIProvider(name, providerConfig) {
+  const providers = getAIProviders();
+  providers[name] = providerConfig;
+  config.set("aiProviders", providers);
+}
+function removeAIProvider(name) {
+  const providers = getAIProviders();
+  delete providers[name];
+  config.set("aiProviders", providers);
+}
+function getDefaultAIProvider() {
+  const providers = getAIProviders();
+  return providers["default"] || Object.values(providers)[0];
+}
+function setDefaultAIProvider(providerConfig) {
+  setAIProvider("default", providerConfig);
+}
+function clearConfig() {
+  config.clear();
+}
+
+// src/cli/utils.ts
+import chalk from "chalk";
+import ora from "ora";
+import boxen from "boxen";
+import { table } from "table";
+var spinner = ora;
+function success(message) {
+  console.log(chalk.green("\u2713"), message);
+}
+function error(message) {
+  console.log(chalk.red("\u2717"), message);
+}
+function warn(message) {
+  console.log(chalk.yellow("!"), message);
+}
+function info(message) {
+  console.log(chalk.blue("i"), message);
+}
+function heading(text) {
+  console.log("\n" + chalk.bold.cyan(text) + "\n");
+}
+function printBox(content, title) {
+  console.log(
+    boxen(content, {
+      padding: 1,
+      margin: 1,
+      borderStyle: "round",
+      borderColor: "cyan",
+      title,
+      titleAlignment: "center"
+    })
+  );
+}
+function printTable(data, headers) {
+  const tableData = headers ? [headers, ...data] : data;
+  console.log(
+    table(tableData, {
+      border: {
+        topBody: "\u2500",
+        topJoin: "\u252C",
+        topLeft: "\u250C",
+        topRight: "\u2510",
+        bottomBody: "\u2500",
+        bottomJoin: "\u2534",
+        bottomLeft: "\u2514",
+        bottomRight: "\u2518",
+        bodyLeft: "\u2502",
+        bodyRight: "\u2502",
+        bodyJoin: "\u2502",
+        joinBody: "\u2500",
+        joinLeft: "\u251C",
+        joinRight: "\u2524",
+        joinJoin: "\u253C"
+      }
+    })
+  );
+}
+function formatEth(eth) {
+  const value = typeof eth === "string" ? parseFloat(eth) : eth;
+  return `${value.toFixed(6)} ETH`;
+}
+function formatDate(date) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+function truncate(str, length) {
+  if (str.length <= length) return str;
+  return str.slice(0, length - 3) + "...";
+}
+function printWelcome() {
+  const banner = `
+${chalk.cyan("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557")}
+${chalk.cyan("\u2551")}  ${chalk.bold.white("MEMOREUM")} ${chalk.gray("- AI Agent Memory Network")}  ${chalk.cyan("\u2551")}
+${chalk.cyan("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D")}
+`;
+  console.log(banner);
+}
+async function withSpinner(message, fn) {
+  const s = spinner(message).start();
+  try {
+    const result = await fn();
+    s.succeed();
+    return result;
+  } catch (err) {
+    s.fail();
+    throw err;
+  }
+}
+
+// src/cli/commands/config.ts
+var AI_PROVIDERS = ["openai", "anthropic", "google", "groq", "together", "ollama", "deepseek", "mistral"];
+function registerConfigCommands(program2) {
+  const configCmd = program2.command("config").description("Manage Memoreum CLI configuration");
+  configCmd.command("show").description("Show current configuration").action(() => {
+    const config2 = getConfig();
+    heading("Current Configuration");
+    const configData = [
+      ["API Key", config2.apiKey ? "********" + config2.apiKey.slice(-8) : chalk2.gray("Not set")],
+      ["Network", config2.network],
+      ["Base URL", config2.baseUrl]
+    ];
+    printTable(configData, ["Setting", "Value"]);
+    const providers = getAIProviders();
+    if (Object.keys(providers).length > 0) {
+      heading("AI Providers");
+      const providerData = Object.entries(providers).map(([name, p]) => [
+        name,
+        p.provider,
+        p.model || "default",
+        "********" + p.apiKey.slice(-4)
+      ]);
+      printTable(providerData, ["Name", "Provider", "Model", "API Key"]);
+    }
+  });
+  configCmd.command("set-key <apiKey>").description("Set your Memoreum API key").action((apiKey) => {
+    setApiKey(apiKey);
+    success("API key saved successfully");
+  });
+  configCmd.command("network <network>").description("Set network (mainnet or testnet)").action((network) => {
+    if (network !== "mainnet" && network !== "testnet") {
+      error('Network must be "mainnet" or "testnet"');
+      return;
+    }
+    setNetwork(network);
+    success(`Network set to ${network}`);
+  });
+  configCmd.command("url <url>").description("Set custom API base URL").action((url) => {
+    setBaseUrl(url);
+    success(`Base URL set to ${url}`);
+  });
+  configCmd.command("add-provider").description("Add an AI provider configuration").action(async () => {
+    const answers = await inquirer.prompt([
+      {
+        type: "input",
+        name: "name",
+        message: 'Configuration name (e.g., "default", "fast", "smart"):',
+        default: "default"
+      },
+      {
+        type: "list",
+        name: "provider",
+        message: "Select AI provider:",
+        choices: AI_PROVIDERS
+      },
+      {
+        type: "input",
+        name: "apiKey",
+        message: "Enter your API key:",
+        validate: (input) => input.length > 0 || "API key is required"
+      },
+      {
+        type: "input",
+        name: "model",
+        message: "Model name (leave empty for default):"
+      },
+      {
+        type: "number",
+        name: "temperature",
+        message: "Temperature (0-2):",
+        default: 0.7
+      },
+      {
+        type: "number",
+        name: "maxTokens",
+        message: "Max tokens:",
+        default: 4096
+      }
+    ]);
+    setAIProvider(answers.name, {
+      provider: answers.provider,
+      apiKey: answers.apiKey,
+      model: answers.model || void 0,
+      temperature: answers.temperature,
+      maxTokens: answers.maxTokens
+    });
+    success(`AI provider "${answers.name}" configured successfully`);
+  });
+  configCmd.command("remove-provider <name>").description("Remove an AI provider configuration").action((name) => {
+    const providers = getAIProviders();
+    if (!providers[name]) {
+      error(`Provider "${name}" not found`);
+      return;
+    }
+    removeAIProvider(name);
+    success(`Provider "${name}" removed`);
+  });
+  configCmd.command("providers").description("List configured AI providers").action(() => {
+    const providers = getAIProviders();
+    if (Object.keys(providers).length === 0) {
+      info("No AI providers configured. Run `memoreum config add-provider` to add one.");
+      return;
+    }
+    heading("Configured AI Providers");
+    const data = Object.entries(providers).map(([name, p]) => [
+      name,
+      p.provider,
+      p.model || "default",
+      String(p.temperature ?? 0.7),
+      String(p.maxTokens ?? 4096)
+    ]);
+    printTable(data, ["Name", "Provider", "Model", "Temperature", "Max Tokens"]);
+  });
+  configCmd.command("reset").description("Reset all configuration").action(async () => {
+    const { confirm } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: "Are you sure you want to reset all configuration?",
+        default: false
+      }
+    ]);
+    if (confirm) {
+      clearConfig();
+      success("Configuration reset");
+    }
+  });
+  configCmd.command("setup").description("Interactive setup wizard").action(async () => {
+    printBox(
+      "Welcome to Memoreum CLI Setup!\n\nThis wizard will help you configure:\n\u2022 Your Memoreum API key\n\u2022 AI provider (OpenAI, Claude, etc.)\n\u2022 Network settings",
+      "Setup Wizard"
+    );
+    const answers = await inquirer.prompt([
+      {
+        type: "input",
+        name: "apiKey",
+        message: "Enter your Memoreum API key:",
+        validate: (input) => input.length > 0 || "API key is required"
+      },
+      {
+        type: "list",
+        name: "network",
+        message: "Select network:",
+        choices: ["mainnet", "testnet"],
+        default: "mainnet"
+      },
+      {
+        type: "confirm",
+        name: "setupAI",
+        message: "Would you like to configure an AI provider now?",
+        default: true
+      }
+    ]);
+    setApiKey(answers.apiKey);
+    setNetwork(answers.network);
+    if (answers.setupAI) {
+      const aiAnswers = await inquirer.prompt([
+        {
+          type: "list",
+          name: "provider",
+          message: "Select AI provider:",
+          choices: AI_PROVIDERS
+        },
+        {
+          type: "input",
+          name: "aiApiKey",
+          message: "Enter your AI provider API key:",
+          validate: (input) => input.length > 0 || "API key is required"
+        }
+      ]);
+      setDefaultAIProvider({
+        provider: aiAnswers.provider,
+        apiKey: aiAnswers.aiApiKey
+      });
+    }
+    success("Setup complete! You can now use Memoreum CLI.");
+    info("Run `memoreum --help` to see available commands.");
+  });
+}
+
+// src/cli/commands/agent.ts
+import inquirer2 from "inquirer";
+import chalk3 from "chalk";
+function registerAgentCommands(program2) {
+  const agentCmd = program2.command("agent").description("Manage Memoreum agents");
+  agentCmd.command("register <name>").description("Register a new agent on Memoreum").action(async (name) => {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      error("No API key configured. Run `memoreum config set-key <key>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey });
+      const agent = await withSpinner("Registering agent...", async () => {
+        const response = await client.registerAgent(name);
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to register agent");
+        }
+        return response.data;
+      });
+      const localAgent = {
+        id: agent.id,
+        name: agent.agentName,
+        apiKey: agent.apiKey,
+        walletAddress: agent.walletAddress,
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      addAgent(localAgent);
+      setCurrentAgent(agent.id);
+      success(`Agent "${name}" registered successfully!`);
+      console.log();
+      console.log(chalk3.gray("Agent ID:"), agent.id);
+      console.log(chalk3.gray("API Key:"), agent.apiKey);
+      console.log(chalk3.gray("Wallet:"), agent.walletAddress);
+      console.log();
+      warn("Save your API key securely - it cannot be retrieved later!");
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to register agent");
+    }
+  });
+  agentCmd.command("list").description("List locally saved agents").action(() => {
+    const agents = getAgents();
+    const currentId = getCurrentAgentId();
+    if (agents.length === 0) {
+      info("No agents saved locally. Run `memoreum agent register <name>` to create one.");
+      return;
+    }
+    heading("Local Agents");
+    const data = agents.map((a) => [
+      a.id === currentId ? chalk3.green("*") : " ",
+      a.name,
+      a.id.slice(0, 16) + "...",
+      a.walletAddress.slice(0, 10) + "...",
+      formatDate(a.createdAt)
+    ]);
+    printTable(data, ["", "Name", "ID", "Wallet", "Created"]);
+  });
+  agentCmd.command("use <idOrName>").description("Select an agent to use").action((idOrName) => {
+    const agents = getAgents();
+    const agent = agents.find(
+      (a) => a.id === idOrName || a.id.startsWith(idOrName) || a.name === idOrName
+    );
+    if (!agent) {
+      error(`Agent "${idOrName}" not found`);
+      return;
+    }
+    setCurrentAgent(agent.id);
+    success(`Now using agent "${agent.name}"`);
+  });
+  agentCmd.command("current").description("Show currently selected agent").action(() => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      info("No agent selected. Run `memoreum agent use <id>` to select one.");
+      return;
+    }
+    heading("Current Agent");
+    const data = [
+      ["Name", agent.name],
+      ["ID", agent.id],
+      ["Wallet", agent.walletAddress],
+      ["API Key", "********" + agent.apiKey.slice(-8)],
+      ["Created", formatDate(agent.createdAt)]
+    ];
+    printTable(data, ["Field", "Value"]);
+  });
+  agentCmd.command("info").description("Get current agent info from Memoreum API").action(async () => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const agentData = await withSpinner("Fetching agent info...", async () => {
+        const response = await client.getAgent();
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to fetch agent");
+        }
+        return response.data;
+      });
+      heading("Agent Info");
+      const data = [
+        ["Name", agentData.agentName],
+        ["ID", agentData.id],
+        ["Wallet", agentData.walletAddress],
+        ["Reputation", `${(agentData.reputationScore * 100).toFixed(1)}%`],
+        ["Total Sales", String(agentData.totalSales)],
+        ["Total Purchases", String(agentData.totalPurchases)],
+        ["Status", agentData.isActive ? chalk3.green("Active") : chalk3.red("Inactive")],
+        ["Created", formatDate(agentData.createdAt)]
+      ];
+      printTable(data, ["Field", "Value"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch agent");
+    }
+  });
+  agentCmd.command("stats").description("Get agent statistics").action(async () => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const stats = await withSpinner("Fetching stats...", async () => {
+        const response = await client.getAgentStats();
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to fetch stats");
+        }
+        return response.data;
+      });
+      heading("Agent Statistics");
+      const data = [
+        ["Memories Stored", String(stats.memoriesStored)],
+        ["Memories Sold", String(stats.memoriesSold)],
+        ["Memories Purchased", String(stats.memoriesPurchased)],
+        ["Total Earnings", `${stats.totalEarnings} ETH`],
+        ["Total Spent", `${stats.totalSpent} ETH`],
+        ["Reputation", `${(stats.reputationScore * 100).toFixed(1)}%`]
+      ];
+      printTable(data, ["Metric", "Value"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch stats");
+    }
+  });
+  agentCmd.command("remove <idOrName>").description("Remove an agent from local storage").action(async (idOrName) => {
+    const agents = getAgents();
+    const agent = agents.find(
+      (a) => a.id === idOrName || a.id.startsWith(idOrName) || a.name === idOrName
+    );
+    if (!agent) {
+      error(`Agent "${idOrName}" not found`);
+      return;
+    }
+    const { confirm } = await inquirer2.prompt([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: `Remove agent "${agent.name}" from local storage?`,
+        default: false
+      }
+    ]);
+    if (confirm) {
+      removeAgent(agent.id);
+      if (getCurrentAgentId() === agent.id) {
+        setCurrentAgent(null);
+      }
+      success(`Agent "${agent.name}" removed`);
+      warn("Note: This only removes from local storage, not from Memoreum.");
+    }
+  });
+  agentCmd.command("import").description("Import an existing agent using API key").action(async () => {
+    const { apiKey } = await inquirer2.prompt([
+      {
+        type: "input",
+        name: "apiKey",
+        message: "Enter agent API key:",
+        validate: (input) => input.length > 0 || "API key is required"
+      }
+    ]);
+    try {
+      const client = new MemoreumClient({ apiKey });
+      const agentData = await withSpinner("Importing agent...", async () => {
+        const response = await client.getAgent();
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Invalid API key");
+        }
+        return response.data;
+      });
+      const existing = getAgents().find((a) => a.id === agentData.id);
+      if (existing) {
+        warn(`Agent "${agentData.agentName}" already exists locally`);
+        return;
+      }
+      const localAgent = {
+        id: agentData.id,
+        name: agentData.agentName,
+        apiKey,
+        walletAddress: agentData.walletAddress,
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      addAgent(localAgent);
+      setCurrentAgent(agentData.id);
+      success(`Agent "${agentData.agentName}" imported successfully!`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to import agent");
+    }
+  });
+}
+
+// src/cli/commands/memory.ts
+import inquirer3 from "inquirer";
+import chalk4 from "chalk";
+var MEMORY_TYPES = [
+  "conversation",
+  "experience",
+  "knowledge",
+  "transaction",
+  "observation",
+  "decision",
+  "learning",
+  "error",
+  "success",
+  "interaction"
+];
+function registerMemoryCommands(program2) {
+  const memoryCmd = program2.command("memory").description("Manage agent memories");
+  memoryCmd.command("store").description("Store a new memory").option("-t, --title <title>", "Memory title").option("-c, --content <content>", "Memory content").option("--type <type>", "Memory type").option("--tags <tags>", "Comma-separated tags").option("--public", "Make memory public").option("--importance <n>", "Importance (0-1)", parseFloat).action(async (options) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    let { title, content, type, tags, importance } = options;
+    const isPublic = options.public || false;
+    if (!title || !content) {
+      const answers = await inquirer3.prompt([
+        {
+          type: "input",
+          name: "title",
+          message: "Memory title:",
+          when: !title,
+          validate: (input) => input.length > 0 || "Title is required"
+        },
+        {
+          type: "editor",
+          name: "content",
+          message: "Memory content (opens editor):",
+          when: !content,
+          validate: (input) => input.length > 0 || "Content is required"
+        },
+        {
+          type: "list",
+          name: "type",
+          message: "Memory type:",
+          choices: MEMORY_TYPES,
+          when: !type,
+          default: "knowledge"
+        },
+        {
+          type: "input",
+          name: "tags",
+          message: "Tags (comma-separated):",
+          when: !tags
+        },
+        {
+          type: "number",
+          name: "importance",
+          message: "Importance (0-1):",
+          when: importance === void 0,
+          default: 0.5
+        }
+      ]);
+      title = title || answers.title;
+      content = content || answers.content;
+      type = type || answers.type;
+      tags = tags || answers.tags;
+      importance = importance ?? answers.importance;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const memory = await withSpinner("Storing memory...", async () => {
+        const response = await client.storeMemory({
+          memoryType: type,
+          title,
+          content,
+          importance: importance || 0.5,
+          tags: tags ? tags.split(",").map((t) => t.trim()) : [],
+          isPublic
+        });
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to store memory");
+        }
+        return response.data;
+      });
+      success("Memory stored successfully!");
+      console.log(chalk4.gray("Memory ID:"), memory.id);
+      console.log(chalk4.gray("Content Hash:"), memory.contentHash);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to store memory");
+    }
+  });
+  memoryCmd.command("list").description("List your memories").option("-l, --limit <n>", "Number of memories", "20").option("--type <type>", "Filter by type").option("--public", "Show only public memories").action(async (options) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const result = await withSpinner("Fetching memories...", async () => {
+        const response = await client.listMemories({
+          limit: parseInt(options.limit),
+          memoryType: options.type,
+          isPublic: options.public ? true : void 0
+        });
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to fetch memories");
+        }
+        return response.data;
+      });
+      if (result.items.length === 0) {
+        info("No memories found.");
+        return;
+      }
+      heading(`Memories (${result.total} total)`);
+      const data = result.items.map((m) => [
+        truncate(m.id, 12),
+        m.memoryType,
+        truncate(m.title, 30),
+        m.isPublic ? chalk4.green("Yes") : chalk4.gray("No"),
+        String(m.totalSold),
+        formatDate(m.createdAt)
+      ]);
+      printTable(data, ["ID", "Type", "Title", "Public", "Sold", "Created"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch memories");
+    }
+  });
+  memoryCmd.command("get <id>").description("Get memory details").action(async (id) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const memory = await withSpinner("Fetching memory...", async () => {
+        const response = await client.getMemory(id);
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Memory not found");
+        }
+        return response.data;
+      });
+      heading("Memory Details");
+      console.log(chalk4.bold("Title:"), memory.title);
+      console.log(chalk4.bold("Type:"), memory.memoryType);
+      console.log(chalk4.bold("ID:"), memory.id);
+      console.log(chalk4.bold("Public:"), memory.isPublic ? "Yes" : "No");
+      console.log(chalk4.bold("Importance:"), memory.importance);
+      console.log(chalk4.bold("Tags:"), memory.tags.length > 0 ? memory.tags.join(", ") : "None");
+      console.log(chalk4.bold("Total Sold:"), memory.totalSold);
+      console.log(chalk4.bold("Created:"), formatDate(memory.createdAt));
+      console.log();
+      console.log(chalk4.bold("Content:"));
+      console.log(chalk4.gray("\u2500".repeat(40)));
+      console.log(memory.content);
+      console.log(chalk4.gray("\u2500".repeat(40)));
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch memory");
+    }
+  });
+  memoryCmd.command("search <query>").description("Search memories semantically").option("-l, --limit <n>", "Number of results", "10").action(async (query, options) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const memories = await withSpinner("Searching...", async () => {
+        const response = await client.searchMemories(query, parseInt(options.limit));
+        if (!response.success) {
+          throw new Error(response.error || "Search failed");
+        }
+        return response.data || [];
+      });
+      if (memories.length === 0) {
+        info("No matching memories found.");
+        return;
+      }
+      heading(`Search Results for "${query}"`);
+      const data = memories.map((m) => [
+        truncate(m.id, 12),
+        m.memoryType,
+        truncate(m.title, 40),
+        formatDate(m.createdAt)
+      ]);
+      printTable(data, ["ID", "Type", "Title", "Created"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Search failed");
+    }
+  });
+  memoryCmd.command("delete <id>").description("Delete a memory").action(async (id) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    const { confirm } = await inquirer3.prompt([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: "Are you sure you want to delete this memory?",
+        default: false
+      }
+    ]);
+    if (!confirm) return;
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      await withSpinner("Deleting memory...", async () => {
+        const response = await client.deleteMemory(id);
+        if (!response.success) {
+          throw new Error(response.error || "Failed to delete memory");
+        }
+      });
+      success("Memory deleted successfully");
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to delete memory");
+    }
+  });
+  memoryCmd.command("purchased").description("List purchased memories").action(async () => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const memories = await withSpinner("Fetching purchased memories...", async () => {
+        const response = await client.getPurchasedMemories();
+        if (!response.success) {
+          throw new Error(response.error || "Failed to fetch");
+        }
+        return response.data || [];
+      });
+      if (memories.length === 0) {
+        info("No purchased memories yet.");
+        return;
+      }
+      heading("Purchased Memories");
+      const data = memories.map((m) => [
+        truncate(m.id, 12),
+        m.memoryType,
+        truncate(m.title, 40),
+        formatDate(m.createdAt)
+      ]);
+      printTable(data, ["ID", "Type", "Title", "Purchased"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch");
+    }
+  });
+}
+
+// src/cli/commands/marketplace.ts
+import inquirer4 from "inquirer";
+import chalk5 from "chalk";
+function registerMarketplaceCommands(program2) {
+  const marketCmd = program2.command("marketplace").alias("market").description("Browse and trade on the Memoreum marketplace");
+  marketCmd.command("browse").description("Browse marketplace listings").option("-l, --limit <n>", "Number of listings", "20").option("--type <type>", "Filter by memory type").option("--min-price <eth>", "Minimum price in ETH").option("--max-price <eth>", "Maximum price in ETH").option("--sort <sort>", "Sort by: price_asc, price_desc, recent, popular").action(async (options) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const result = await withSpinner("Fetching listings...", async () => {
+        const response = await client.browseMarketplace({
+          limit: parseInt(options.limit),
+          memoryType: options.type,
+          minPrice: options.minPrice,
+          maxPrice: options.maxPrice,
+          sortBy: options.sort
+        });
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to fetch listings");
+        }
+        return response.data;
+      });
+      if (result.items.length === 0) {
+        info("No listings found.");
+        return;
+      }
+      heading(`Marketplace Listings (${result.total} total)`);
+      const data = result.items.map((l) => [
+        truncate(l.id, 12),
+        l.memory?.title ? truncate(l.memory.title, 30) : "Unknown",
+        l.memory?.memoryType || "-",
+        formatEth(l.priceEth),
+        String(l.views),
+        l.seller?.agentName ? truncate(l.seller.agentName, 15) : "Unknown",
+        formatDate(l.listedAt)
+      ]);
+      printTable(data, ["ID", "Title", "Type", "Price", "Views", "Seller", "Listed"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch listings");
+    }
+  });
+  marketCmd.command("view <listingId>").description("View listing details").action(async (listingId) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const listing = await withSpinner("Fetching listing...", async () => {
+        const response = await client.getListing(listingId);
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Listing not found");
+        }
+        return response.data;
+      });
+      heading("Listing Details");
+      console.log(chalk5.bold("Listing ID:"), listing.id);
+      console.log(chalk5.bold("Price:"), chalk5.green(formatEth(listing.priceEth)));
+      console.log(chalk5.bold("Views:"), listing.views);
+      console.log(chalk5.bold("Status:"), listing.isActive ? chalk5.green("Active") : chalk5.red("Inactive"));
+      console.log(chalk5.bold("Listed:"), formatDate(listing.listedAt));
+      if (listing.expiresAt) {
+        console.log(chalk5.bold("Expires:"), formatDate(listing.expiresAt));
+      }
+      if (listing.memory) {
+        console.log();
+        console.log(chalk5.bold.cyan("Memory Info:"));
+        console.log(chalk5.bold("Title:"), listing.memory.title);
+        console.log(chalk5.bold("Type:"), listing.memory.memoryType);
+        console.log(chalk5.bold("Importance:"), listing.memory.importance);
+        console.log(chalk5.bold("Tags:"), listing.memory.tags.length > 0 ? listing.memory.tags.join(", ") : "None");
+      }
+      if (listing.seller) {
+        console.log();
+        console.log(chalk5.bold.cyan("Seller Info:"));
+        console.log(chalk5.bold("Name:"), listing.seller.agentName);
+        console.log(chalk5.bold("Reputation:"), `${(listing.seller.reputationScore * 100).toFixed(1)}%`);
+      }
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch listing");
+    }
+  });
+  marketCmd.command("buy <listingId>").description("Purchase a memory from the marketplace").action(async (listingId) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const listingResponse = await client.getListing(listingId);
+      if (!listingResponse.success || !listingResponse.data) {
+        error("Listing not found");
+        return;
+      }
+      const listing = listingResponse.data;
+      console.log();
+      console.log(chalk5.bold("Memory:"), listing.memory?.title || "Unknown");
+      console.log(chalk5.bold("Price:"), chalk5.green(formatEth(listing.priceEth)));
+      console.log(chalk5.bold("Seller:"), listing.seller?.agentName || "Unknown");
+      console.log();
+      const { confirm } = await inquirer4.prompt([
+        {
+          type: "confirm",
+          name: "confirm",
+          message: `Purchase this memory for ${formatEth(listing.priceEth)}?`,
+          default: false
+        }
+      ]);
+      if (!confirm) {
+        info("Purchase cancelled");
+        return;
+      }
+      const result = await withSpinner("Processing purchase...", async () => {
+        const response = await client.purchaseMemory({ listingId });
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Purchase failed");
+        }
+        return response.data;
+      });
+      success("Purchase successful!");
+      console.log(chalk5.gray("Transaction ID:"), result.transaction.id);
+      console.log(chalk5.gray("TX Hash:"), result.txHash);
+      info("The memory has been added to your collection.");
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Purchase failed");
+    }
+  });
+  marketCmd.command("sell <memoryId>").description("List a memory for sale").option("-p, --price <eth>", "Price in ETH").option("-d, --days <n>", "Listing duration in days").action(async (memoryId, options) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    let { price, days } = options;
+    if (!price) {
+      const answers = await inquirer4.prompt([
+        {
+          type: "input",
+          name: "price",
+          message: "Price in ETH:",
+          validate: (input) => {
+            const num = parseFloat(input);
+            return !isNaN(num) && num > 0 || "Enter a valid price";
+          }
+        },
+        {
+          type: "number",
+          name: "days",
+          message: "Listing duration (days, 0 for no expiry):",
+          default: 30
+        }
+      ]);
+      price = answers.price;
+      days = answers.days;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const listing = await withSpinner("Creating listing...", async () => {
+        const response = await client.createListing({
+          memoryId,
+          priceEth: price,
+          expiresInDays: days > 0 ? parseInt(days) : void 0
+        });
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to create listing");
+        }
+        return response.data;
+      });
+      success("Memory listed for sale!");
+      console.log(chalk5.gray("Listing ID:"), listing.id);
+      console.log(chalk5.gray("Price:"), formatEth(listing.priceEth));
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to create listing");
+    }
+  });
+  marketCmd.command("my-listings").description("View your active listings").action(async () => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const listings = await withSpinner("Fetching your listings...", async () => {
+        const response = await client.getMyListings();
+        if (!response.success) {
+          throw new Error(response.error || "Failed to fetch listings");
+        }
+        return response.data || [];
+      });
+      if (listings.length === 0) {
+        info("You have no active listings.");
+        return;
+      }
+      heading("Your Listings");
+      const data = listings.map((l) => [
+        truncate(l.id, 12),
+        l.memory?.title ? truncate(l.memory.title, 30) : "Unknown",
+        formatEth(l.priceEth),
+        String(l.views),
+        l.isActive ? chalk5.green("Active") : chalk5.gray("Inactive"),
+        formatDate(l.listedAt)
+      ]);
+      printTable(data, ["ID", "Title", "Price", "Views", "Status", "Listed"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch listings");
+    }
+  });
+  marketCmd.command("remove <listingId>").description("Remove a listing").action(async (listingId) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    const { confirm } = await inquirer4.prompt([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: "Remove this listing?",
+        default: false
+      }
+    ]);
+    if (!confirm) return;
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      await withSpinner("Removing listing...", async () => {
+        const response = await client.removeListing(listingId);
+        if (!response.success) {
+          throw new Error(response.error || "Failed to remove listing");
+        }
+      });
+      success("Listing removed");
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to remove listing");
+    }
+  });
+}
+
+// src/cli/commands/chat.ts
+import inquirer5 from "inquirer";
+import chalk6 from "chalk";
+function registerChatCommands(program2) {
+  program2.command("chat").description("Start an interactive chat with your AI agent").option("--model <model>", "Override the AI model").option("--system <prompt>", "Custom system prompt").option("--stream", "Stream responses", true).action(async (options) => {
+    const agentConfig = getCurrentAgent();
+    if (!agentConfig) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    const aiProvider = getDefaultAIProvider();
+    if (!aiProvider) {
+      error("No AI provider configured. Run `memoreum config add-provider` first.");
+      return;
+    }
+    if (options.model) {
+      aiProvider.model = options.model;
+    }
+    const agent = new MemoreumAgent(agentConfig.apiKey, {
+      name: agentConfig.name,
+      aiProvider,
+      systemPrompt: options.system
+    });
+    printBox(
+      `Connected as ${chalk6.cyan(agentConfig.name)}
+Model: ${chalk6.gray(aiProvider.model || "default")}
+Provider: ${chalk6.gray(aiProvider.provider)}
+
+Type your message and press Enter.
+Commands: /clear, /history, /model, /exit`,
+      "Memoreum Agent Chat"
+    );
+    while (true) {
+      const { message } = await inquirer5.prompt([
+        {
+          type: "input",
+          name: "message",
+          message: chalk6.cyan("You:"),
+          prefix: ""
+        }
+      ]);
+      if (!message || message.trim() === "") continue;
+      if (message.startsWith("/")) {
+        const cmd = message.slice(1).toLowerCase().trim();
+        if (cmd === "exit" || cmd === "quit" || cmd === "q") {
+          info("Goodbye!");
+          break;
+        }
+        if (cmd === "clear") {
+          agent.clearHistory();
+          console.clear();
+          info("Conversation cleared");
+          continue;
+        }
+        if (cmd === "history") {
+          heading("Conversation History");
+          const history = agent.getHistory();
+          history.forEach((msg, i) => {
+            if (msg.role === "system") return;
+            const prefix = msg.role === "user" ? chalk6.cyan("You:") : chalk6.green("Agent:");
+            console.log(`${prefix} ${msg.content.slice(0, 100)}${msg.content.length > 100 ? "..." : ""}`);
+          });
+          continue;
+        }
+        if (cmd === "model") {
+          info(`Current model: ${agent.getModel()}`);
+          continue;
+        }
+        if (cmd.startsWith("model ")) {
+          const newModel = cmd.slice(6).trim();
+          agent.setModel(newModel);
+          info(`Model changed to: ${newModel}`);
+          continue;
+        }
+        if (cmd === "help") {
+          console.log();
+          console.log(chalk6.bold("Available Commands:"));
+          console.log("  /clear    - Clear conversation history");
+          console.log("  /history  - Show conversation history");
+          console.log("  /model    - Show current model");
+          console.log("  /model <name> - Change model");
+          console.log("  /exit     - Exit chat");
+          console.log();
+          continue;
+        }
+        info(`Unknown command: ${cmd}. Type /help for available commands.`);
+        continue;
+      }
+      try {
+        process.stdout.write(chalk6.green("\nAgent: "));
+        if (options.stream) {
+          for await (const chunk of agent.chatStream(message)) {
+            process.stdout.write(chunk);
+          }
+          console.log("\n");
+        } else {
+          const response = await agent.chat(message);
+          console.log(response);
+          console.log();
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : "Failed to get response");
+      }
+    }
+  });
+  program2.command("ask <message>").description("Ask your agent a single question").option("--model <model>", "Override the AI model").action(async (message, options) => {
+    const agentConfig = getCurrentAgent();
+    if (!agentConfig) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    const aiProvider = getDefaultAIProvider();
+    if (!aiProvider) {
+      error("No AI provider configured. Run `memoreum config add-provider` first.");
+      return;
+    }
+    if (options.model) {
+      aiProvider.model = options.model;
+    }
+    const agent = new MemoreumAgent(agentConfig.apiKey, {
+      name: agentConfig.name,
+      aiProvider
+    });
+    try {
+      process.stdout.write(chalk6.green("Agent: "));
+      for await (const chunk of agent.chatStream(message)) {
+        process.stdout.write(chunk);
+      }
+      console.log();
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to get response");
+    }
+  });
+}
+
+// src/cli/commands/wallet.ts
+import chalk7 from "chalk";
+function registerWalletCommands(program2) {
+  const walletCmd = program2.command("wallet").description("Manage agent wallet");
+  walletCmd.command("info").description("Show wallet information").action(async () => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const balance = await withSpinner("Fetching wallet info...", async () => {
+        const response = await client.getBalance();
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to fetch balance");
+        }
+        return response.data;
+      });
+      heading("Wallet Information");
+      const data = [
+        ["Address", agent.walletAddress],
+        ["Balance", chalk7.green(formatEth(balance.balanceEth))],
+        ["Network", "Base"]
+      ];
+      printTable(data, ["Field", "Value"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch wallet info");
+    }
+  });
+  walletCmd.command("balance").description("Show wallet balance").action(async () => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      const balance = await withSpinner("Fetching balance...", async () => {
+        const response = await client.getBalance();
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to fetch balance");
+        }
+        return response.data;
+      });
+      console.log();
+      console.log(chalk7.bold("Balance:"), chalk7.green(formatEth(balance.balanceEth)));
+      console.log();
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch balance");
+    }
+  });
+  walletCmd.command("address").description("Show wallet address").action(() => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    console.log();
+    console.log(chalk7.bold("Wallet Address:"));
+    console.log(agent.walletAddress);
+    console.log();
+    info("Send ETH to this address on Base network to fund your agent.");
+  });
+  walletCmd.command("history").description("Show transaction history").option("-t, --type <type>", "Filter by type: purchases, sales, all", "all").action(async (options) => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    try {
+      const client = new MemoreumClient({ apiKey: agent.apiKey });
+      let transactions = [];
+      await withSpinner("Fetching transactions...", async () => {
+        if (options.type === "all" || options.type === "purchases") {
+          const purchaseResponse = await client.getPurchaseHistory();
+          if (purchaseResponse.success && purchaseResponse.data) {
+            transactions.push(
+              ...purchaseResponse.data.map((t) => ({
+                ...t,
+                type: "Purchase"
+              }))
+            );
+          }
+        }
+        if (options.type === "all" || options.type === "sales") {
+          const salesResponse = await client.getSalesHistory();
+          if (salesResponse.success && salesResponse.data) {
+            transactions.push(
+              ...salesResponse.data.map((t) => ({
+                ...t,
+                type: "Sale"
+              }))
+            );
+          }
+        }
+      });
+      if (transactions.length === 0) {
+        info("No transactions found.");
+        return;
+      }
+      transactions.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      heading("Transaction History");
+      const data = transactions.slice(0, 20).map((t) => [
+        t.id.slice(0, 12) + "...",
+        t.type === "Purchase" ? chalk7.red(t.type) : chalk7.green(t.type),
+        formatEth(t.priceEth),
+        t.status === "completed" ? chalk7.green(t.status) : chalk7.yellow(t.status),
+        new Date(t.createdAt).toLocaleDateString()
+      ]);
+      printTable(data, ["ID", "Type", "Amount", "Status", "Date"]);
+    } catch (err) {
+      error(err instanceof Error ? err.message : "Failed to fetch transactions");
+    }
+  });
+  walletCmd.command("fund").description("Instructions to fund your wallet").action(() => {
+    const agent = getCurrentAgent();
+    if (!agent) {
+      error("No agent selected. Run `memoreum agent use <id>` first.");
+      return;
+    }
+    heading("Fund Your Wallet");
+    console.log(chalk7.bold("Your wallet address:"));
+    console.log(chalk7.cyan(agent.walletAddress));
+    console.log();
+    console.log(chalk7.bold("To fund your agent wallet:"));
+    console.log();
+    console.log("1. Make sure you have ETH on Base network");
+    console.log("2. Send ETH to the address above");
+    console.log("3. Wait for the transaction to confirm");
+    console.log();
+    console.log(chalk7.bold("Need Base ETH?"));
+    console.log("\u2022 Bridge from Ethereum: https://bridge.base.org");
+    console.log("\u2022 Buy on exchanges that support Base");
+    console.log("\u2022 Use a faucet for testnet: https://www.coinbase.com/faucets/base-ethereum-goerli-faucet");
+    console.log();
+    warn("Always verify the address before sending funds!");
+  });
+}
+
+// src/cli/index.ts
+var program = new Command();
+program.name("memoreum").description("Memoreum CLI - AI Agent Memory Marketplace on Base Chain").version("1.0.0").hook("preAction", () => {
+});
+registerConfigCommands(program);
+registerAgentCommands(program);
+registerMemoryCommands(program);
+registerMarketplaceCommands(program);
+registerChatCommands(program);
+registerWalletCommands(program);
+program.action(() => {
+  printWelcome();
+  console.log(chalk8.bold("Quick Start:"));
+  console.log();
+  console.log("  1. Setup your configuration:");
+  console.log(chalk8.cyan("     memoreum config setup"));
+  console.log();
+  console.log("  2. Register a new agent:");
+  console.log(chalk8.cyan("     memoreum agent register <name>"));
+  console.log();
+  console.log("  3. Start chatting:");
+  console.log(chalk8.cyan("     memoreum chat"));
+  console.log();
+  console.log(chalk8.gray("Run `memoreum --help` for all commands."));
+  console.log();
+});
+program.parse();

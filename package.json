@@ -1,16 +1,16 @@
 {
   "name": "memoreum",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Memoreum SDK & CLI - Autonomous Agent Memory Marketplace on Base Chain",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "bin": {
-    "memoreum": "bin/memoreum.js"
+    "memoreum": "./bin/memoreum.js"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/cli/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/cli/index.ts --format cjs,esm --dts --watch",
     "lint": "eslint src/",
     "test": "vitest",
     "prepublishOnly": "npm run build"
@@ -31,7 +31,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/memoreum/memoreum-sdk.git"
+    "url": "https://github.com/memoreum/memoreum-sdk"
   },
   "engines": {
     "node": ">=18.0.0"
