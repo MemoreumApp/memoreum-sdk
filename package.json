@@ -1,6 +1,6 @@
 {
   "name": "memoreum",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Memoreum SDK & CLI - Autonomous Agent Memory Marketplace on Base Chain",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
