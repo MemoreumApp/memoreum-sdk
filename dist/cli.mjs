@@ -1,39 +1,16 @@
 #!/usr/bin/env node
-"use strict";
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
 
 // src/cli/index.ts
-var import_commander = require("commander");
-var import_chalk8 = __toESM(require("chalk"));
+import { Command } from "commander";
+import chalk8 from "chalk";
 
 // src/cli/commands/config.ts
-var import_inquirer = __toESM(require("inquirer"));
-var import_chalk2 = __toESM(require("chalk"));
+import inquirer from "inquirer";
+import chalk2 from "chalk";
 
 // src/cli/config.ts
-var import_conf = __toESM(require("conf"));
-var config = new import_conf.default({
+import Conf from "conf";
+var config = new Conf({
   projectName: "memoreum",
   defaults: {
     config: {
@@ -109,13 +86,13 @@ function clearConfig() {
 }
 
 // src/cli/utils.ts
-var import_chalk = __toESM(require("chalk"));
-var import_ora = __toESM(require("ora"));
-var import_boxen = __toESM(require("boxen"));
-var import_table = require("table");
+import chalk from "chalk";
+import ora from "ora";
+import boxen from "boxen";
+import { table } from "table";
 
 // src/sdk/MemoreumClient.ts
-var import_ethers = require("ethers");
+import { ethers } from "ethers";
 var DEFAULT_BASE_URL = "https://api.memoreum.app";
 var TESTNET_BASE_URL = "https://testnet-api.memoreum.app";
 var MemoreumClient = class {
@@ -421,8 +398,8 @@ var MemoreumClient = class {
    */
   async initializeWallet(privateKey) {
     const rpcUrl = this.network === "mainnet" ? "https://mainnet.base.org" : "https://sepolia.base.org";
-    this.provider = new import_ethers.ethers.JsonRpcProvider(rpcUrl);
-    this.wallet = new import_ethers.ethers.Wallet(privateKey, this.provider);
+    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    this.wallet = new ethers.Wallet(privateKey, this.provider);
   }
   /**
    * Get wallet information
@@ -438,7 +415,7 @@ var MemoreumClient = class {
         success: true,
         data: {
           address: this.wallet.address,
-          balanceEth: import_ethers.ethers.formatEther(balance),
+          balanceEth: ethers.formatEther(balance),
           balanceWei: balance.toString(),
           network: network.name
         }
@@ -460,7 +437,7 @@ var MemoreumClient = class {
     try {
       const tx = await this.wallet.sendTransaction({
         to: input.to,
-        value: import_ethers.ethers.parseEther(input.amountEth)
+        value: ethers.parseEther(input.amountEth)
       });
       const receipt = await tx.wait();
       return {
@@ -505,7 +482,7 @@ var MemoreumClient = class {
    * Generate content hash for a memory
    */
   generateContentHash(content) {
-    return import_ethers.ethers.keccak256(import_ethers.ethers.toUtf8Bytes(content));
+    return ethers.keccak256(ethers.toUtf8Bytes(content));
   }
   /**
    * Verify API key is valid
@@ -529,25 +506,25 @@ var MemoreumClient = class {
 };
 
 // src/cli/utils.ts
-var spinner = import_ora.default;
+var spinner = ora;
 function success(message) {
-  console.log(import_chalk.default.green("\u2713"), message);
+  console.log(chalk.green("\u2713"), message);
 }
 function error(message) {
-  console.log(import_chalk.default.red("\u2717"), message);
+  console.log(chalk.red("\u2717"), message);
 }
 function warn(message) {
-  console.log(import_chalk.default.yellow("!"), message);
+  console.log(chalk.yellow("!"), message);
 }
 function info(message) {
-  console.log(import_chalk.default.blue("i"), message);
+  console.log(chalk.blue("i"), message);
 }
 function heading(text) {
-  console.log("\n" + import_chalk.default.bold.cyan(text) + "\n");
+  console.log("\n" + chalk.bold.cyan(text) + "\n");
 }
 function printBox(content, title) {
   console.log(
-    (0, import_boxen.default)(content, {
+    boxen(content, {
       padding: 1,
       margin: 1,
       borderStyle: "round",
@@ -560,7 +537,7 @@ function printBox(content, title) {
 function printTable(data, headers) {
   const tableData = headers ? [headers, ...data] : data;
   console.log(
-    (0, import_table.table)(tableData, {
+    table(tableData, {
       border: {
         topBody: "\u2500",
         topJoin: "\u252C",
@@ -601,9 +578,9 @@ function truncate(str, length) {
 }
 function printWelcome() {
   const banner = `
-${import_chalk.default.cyan("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557")}
-${import_chalk.default.cyan("\u2551")}  ${import_chalk.default.bold.white("MEMOREUM")} ${import_chalk.default.gray("- AI Agent Memory Network")}  ${import_chalk.default.cyan("\u2551")}
-${import_chalk.default.cyan("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D")}
+${chalk.cyan("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557")}
+${chalk.cyan("\u2551")}  ${chalk.bold.white("MEMOREUM")} ${chalk.gray("- AI Agent Memory Network")}  ${chalk.cyan("\u2551")}
+${chalk.cyan("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D")}
 `;
   console.log(banner);
 }
@@ -627,7 +604,7 @@ function registerConfigCommands(program2) {
     const config2 = getConfig();
     heading("Current Configuration");
     const configData = [
-      ["API Key", config2.apiKey ? "********" + config2.apiKey.slice(-8) : import_chalk2.default.gray("Not set")],
+      ["API Key", config2.apiKey ? "********" + config2.apiKey.slice(-8) : chalk2.gray("Not set")],
       ["Network", config2.network],
       ["Base URL", config2.baseUrl]
     ];
@@ -661,7 +638,7 @@ function registerConfigCommands(program2) {
     success(`Base URL set to ${url}`);
   });
   configCmd.command("add-provider").description("Add an AI provider configuration").action(async () => {
-    const answers = await import_inquirer.default.prompt([
+    const answers = await inquirer.prompt([
       {
         type: "input",
         name: "name",
@@ -733,7 +710,7 @@ function registerConfigCommands(program2) {
     printTable(data, ["Name", "Provider", "Model", "Temperature", "Max Tokens"]);
   });
   configCmd.command("reset").description("Reset all configuration").action(async () => {
-    const { confirm } = await import_inquirer.default.prompt([
+    const { confirm } = await inquirer.prompt([
       {
         type: "confirm",
         name: "confirm",
@@ -751,7 +728,7 @@ function registerConfigCommands(program2) {
       "Welcome to Memoreum CLI Setup!\n\nThis wizard will help you configure:\n\u2022 Your Memoreum API key\n\u2022 AI provider (OpenAI, Claude, etc.)\n\u2022 Network settings",
       "Setup Wizard"
     );
-    const answers = await import_inquirer.default.prompt([
+    const answers = await inquirer.prompt([
       {
         type: "input",
         name: "apiKey",
@@ -775,7 +752,7 @@ function registerConfigCommands(program2) {
     setApiKey(answers.apiKey);
     setNetwork(answers.network);
     if (answers.setupAI) {
-      const aiAnswers = await import_inquirer.default.prompt([
+      const aiAnswers = await inquirer.prompt([
         {
           type: "list",
           name: "provider",
@@ -800,8 +777,8 @@ function registerConfigCommands(program2) {
 }
 
 // src/cli/commands/agent.ts
-var import_inquirer2 = __toESM(require("inquirer"));
-var import_chalk3 = __toESM(require("chalk"));
+import inquirer2 from "inquirer";
+import chalk3 from "chalk";
 function registerAgentCommands(program2) {
   const agentCmd = program2.command("agent").description("Manage Memoreum agents");
   agentCmd.command("register <name>").description("Register a new agent on Memoreum").action(async (name) => {
@@ -826,13 +803,13 @@ function registerAgentCommands(program2) {
       setCurrentAgent(agentData.agentId);
       success(`Agent "${name}" registered successfully!`);
       console.log();
-      console.log(import_chalk3.default.gray("Agent ID:"), agentData.agentId);
-      console.log(import_chalk3.default.gray("API Key:"), agentData.apiKey);
-      console.log(import_chalk3.default.gray("Wallet:"), agentData.wallet.address);
+      console.log(chalk3.gray("Agent ID:"), agentData.agentId);
+      console.log(chalk3.gray("API Key:"), agentData.apiKey);
+      console.log(chalk3.gray("Wallet:"), agentData.wallet.address);
       console.log();
-      console.log(import_chalk3.default.yellow("IMPORTANT: Save these credentials securely!"));
-      console.log(import_chalk3.default.gray("Private Key:"), agentData.wallet.privateKey);
-      console.log(import_chalk3.default.gray("Mnemonic:"), agentData.wallet.mnemonic);
+      console.log(chalk3.yellow("IMPORTANT: Save these credentials securely!"));
+      console.log(chalk3.gray("Private Key:"), agentData.wallet.privateKey);
+      console.log(chalk3.gray("Mnemonic:"), agentData.wallet.mnemonic);
       console.log();
       warn("These credentials cannot be retrieved later!");
     } catch (err) {
@@ -848,7 +825,7 @@ function registerAgentCommands(program2) {
     }
     heading("Local Agents");
     const data = agents.map((a) => [
-      a.id === currentId ? import_chalk3.default.green("*") : " ",
+      a.id === currentId ? chalk3.green("*") : " ",
       a.name,
       a.id.slice(0, 16) + "...",
       a.walletAddress.slice(0, 10) + "...",
@@ -907,7 +884,7 @@ function registerAgentCommands(program2) {
         ["Reputation", `${(agentData.reputationScore * 100).toFixed(1)}%`],
         ["Total Sales", String(agentData.totalSales)],
         ["Total Purchases", String(agentData.totalPurchases)],
-        ["Status", agentData.isActive ? import_chalk3.default.green("Active") : import_chalk3.default.red("Inactive")],
+        ["Status", agentData.isActive ? chalk3.green("Active") : chalk3.red("Inactive")],
         ["Created", formatDate(agentData.createdAt)]
       ];
       printTable(data, ["Field", "Value"]);
@@ -953,7 +930,7 @@ function registerAgentCommands(program2) {
       error(`Agent "${idOrName}" not found`);
       return;
     }
-    const { confirm } = await import_inquirer2.default.prompt([
+    const { confirm } = await inquirer2.prompt([
       {
         type: "confirm",
         name: "confirm",
@@ -971,7 +948,7 @@ function registerAgentCommands(program2) {
     }
   });
   agentCmd.command("import").description("Import an existing agent using API key").action(async () => {
-    const { apiKey } = await import_inquirer2.default.prompt([
+    const { apiKey } = await inquirer2.prompt([
       {
         type: "input",
         name: "apiKey",
@@ -1010,8 +987,8 @@ function registerAgentCommands(program2) {
 }
 
 // src/cli/commands/memory.ts
-var import_inquirer3 = __toESM(require("inquirer"));
-var import_chalk4 = __toESM(require("chalk"));
+import inquirer3 from "inquirer";
+import chalk4 from "chalk";
 var MEMORY_TYPES = [
   "conversation",
   "experience",
@@ -1035,7 +1012,7 @@ function registerMemoryCommands(program2) {
     let { title, content, type, tags, importance } = options;
     const isPublic = options.public || false;
     if (!title || !content) {
-      const answers = await import_inquirer3.default.prompt([
+      const answers = await inquirer3.prompt([
         {
           type: "input",
           name: "title",
@@ -1095,8 +1072,8 @@ function registerMemoryCommands(program2) {
         return response.data;
       });
       success("Memory stored successfully!");
-      console.log(import_chalk4.default.gray("Memory ID:"), memory.id);
-      console.log(import_chalk4.default.gray("Content Hash:"), memory.contentHash);
+      console.log(chalk4.gray("Memory ID:"), memory.id);
+      console.log(chalk4.gray("Content Hash:"), memory.contentHash);
     } catch (err) {
       error(err instanceof Error ? err.message : "Failed to store memory");
     }
@@ -1129,7 +1106,7 @@ function registerMemoryCommands(program2) {
         truncate(m.id, 12),
         m.memoryType,
         truncate(m.title, 30),
-        m.isPublic ? import_chalk4.default.green("Yes") : import_chalk4.default.gray("No"),
+        m.isPublic ? chalk4.green("Yes") : chalk4.gray("No"),
         String(m.totalSold),
         formatDate(m.createdAt)
       ]);
@@ -1154,19 +1131,19 @@ function registerMemoryCommands(program2) {
         return response.data;
       });
       heading("Memory Details");
-      console.log(import_chalk4.default.bold("Title:"), memory.title);
-      console.log(import_chalk4.default.bold("Type:"), memory.memoryType);
-      console.log(import_chalk4.default.bold("ID:"), memory.id);
-      console.log(import_chalk4.default.bold("Public:"), memory.isPublic ? "Yes" : "No");
-      console.log(import_chalk4.default.bold("Importance:"), memory.importance);
-      console.log(import_chalk4.default.bold("Tags:"), memory.tags.length > 0 ? memory.tags.join(", ") : "None");
-      console.log(import_chalk4.default.bold("Total Sold:"), memory.totalSold);
-      console.log(import_chalk4.default.bold("Created:"), formatDate(memory.createdAt));
+      console.log(chalk4.bold("Title:"), memory.title);
+      console.log(chalk4.bold("Type:"), memory.memoryType);
+      console.log(chalk4.bold("ID:"), memory.id);
+      console.log(chalk4.bold("Public:"), memory.isPublic ? "Yes" : "No");
+      console.log(chalk4.bold("Importance:"), memory.importance);
+      console.log(chalk4.bold("Tags:"), memory.tags.length > 0 ? memory.tags.join(", ") : "None");
+      console.log(chalk4.bold("Total Sold:"), memory.totalSold);
+      console.log(chalk4.bold("Created:"), formatDate(memory.createdAt));
       console.log();
-      console.log(import_chalk4.default.bold("Content:"));
-      console.log(import_chalk4.default.gray("\u2500".repeat(40)));
+      console.log(chalk4.bold("Content:"));
+      console.log(chalk4.gray("\u2500".repeat(40)));
       console.log(memory.content);
-      console.log(import_chalk4.default.gray("\u2500".repeat(40)));
+      console.log(chalk4.gray("\u2500".repeat(40)));
     } catch (err) {
       error(err instanceof Error ? err.message : "Failed to fetch memory");
     }
@@ -1208,7 +1185,7 @@ function registerMemoryCommands(program2) {
       error("No agent selected. Run `memoreum agent use <id>` first.");
       return;
     }
-    const { confirm } = await import_inquirer3.default.prompt([
+    const { confirm } = await inquirer3.prompt([
       {
         type: "confirm",
         name: "confirm",
@@ -1264,8 +1241,8 @@ function registerMemoryCommands(program2) {
 }
 
 // src/cli/commands/marketplace.ts
-var import_inquirer4 = __toESM(require("inquirer"));
-var import_chalk5 = __toESM(require("chalk"));
+import inquirer4 from "inquirer";
+import chalk5 from "chalk";
 function registerMarketplaceCommands(program2) {
   const marketCmd = program2.command("marketplace").alias("market").description("Browse and trade on the Memoreum marketplace");
   marketCmd.command("browse").description("Browse marketplace listings").option("-l, --limit <n>", "Number of listings", "20").option("--type <type>", "Filter by memory type").option("--min-price <eth>", "Minimum price in ETH").option("--max-price <eth>", "Maximum price in ETH").option("--sort <sort>", "Sort by: price_asc, price_desc, recent, popular").action(async (options) => {
@@ -1324,27 +1301,27 @@ function registerMarketplaceCommands(program2) {
         return response.data;
       });
       heading("Listing Details");
-      console.log(import_chalk5.default.bold("Listing ID:"), listing.id);
-      console.log(import_chalk5.default.bold("Price:"), import_chalk5.default.green(formatEth(listing.priceEth)));
-      console.log(import_chalk5.default.bold("Views:"), listing.views);
-      console.log(import_chalk5.default.bold("Status:"), listing.isActive ? import_chalk5.default.green("Active") : import_chalk5.default.red("Inactive"));
-      console.log(import_chalk5.default.bold("Listed:"), formatDate(listing.listedAt));
+      console.log(chalk5.bold("Listing ID:"), listing.id);
+      console.log(chalk5.bold("Price:"), chalk5.green(formatEth(listing.priceEth)));
+      console.log(chalk5.bold("Views:"), listing.views);
+      console.log(chalk5.bold("Status:"), listing.isActive ? chalk5.green("Active") : chalk5.red("Inactive"));
+      console.log(chalk5.bold("Listed:"), formatDate(listing.listedAt));
       if (listing.expiresAt) {
-        console.log(import_chalk5.default.bold("Expires:"), formatDate(listing.expiresAt));
+        console.log(chalk5.bold("Expires:"), formatDate(listing.expiresAt));
       }
       if (listing.memory) {
         console.log();
-        console.log(import_chalk5.default.bold.cyan("Memory Info:"));
-        console.log(import_chalk5.default.bold("Title:"), listing.memory.title);
-        console.log(import_chalk5.default.bold("Type:"), listing.memory.memoryType);
-        console.log(import_chalk5.default.bold("Importance:"), listing.memory.importance);
-        console.log(import_chalk5.default.bold("Tags:"), listing.memory.tags.length > 0 ? listing.memory.tags.join(", ") : "None");
+        console.log(chalk5.bold.cyan("Memory Info:"));
+        console.log(chalk5.bold("Title:"), listing.memory.title);
+        console.log(chalk5.bold("Type:"), listing.memory.memoryType);
+        console.log(chalk5.bold("Importance:"), listing.memory.importance);
+        console.log(chalk5.bold("Tags:"), listing.memory.tags.length > 0 ? listing.memory.tags.join(", ") : "None");
       }
       if (listing.seller) {
         console.log();
-        console.log(import_chalk5.default.bold.cyan("Seller Info:"));
-        console.log(import_chalk5.default.bold("Name:"), listing.seller.agentName);
-        console.log(import_chalk5.default.bold("Reputation:"), `${(listing.seller.reputationScore * 100).toFixed(1)}%`);
+        console.log(chalk5.bold.cyan("Seller Info:"));
+        console.log(chalk5.bold("Name:"), listing.seller.agentName);
+        console.log(chalk5.bold("Reputation:"), `${(listing.seller.reputationScore * 100).toFixed(1)}%`);
       }
     } catch (err) {
       error(err instanceof Error ? err.message : "Failed to fetch listing");
@@ -1365,11 +1342,11 @@ function registerMarketplaceCommands(program2) {
       }
       const listing = listingResponse.data;
       console.log();
-      console.log(import_chalk5.default.bold("Memory:"), listing.memory?.title || "Unknown");
-      console.log(import_chalk5.default.bold("Price:"), import_chalk5.default.green(formatEth(listing.priceEth)));
-      console.log(import_chalk5.default.bold("Seller:"), listing.seller?.agentName || "Unknown");
+      console.log(chalk5.bold("Memory:"), listing.memory?.title || "Unknown");
+      console.log(chalk5.bold("Price:"), chalk5.green(formatEth(listing.priceEth)));
+      console.log(chalk5.bold("Seller:"), listing.seller?.agentName || "Unknown");
       console.log();
-      const { confirm } = await import_inquirer4.default.prompt([
+      const { confirm } = await inquirer4.prompt([
         {
           type: "confirm",
           name: "confirm",
@@ -1389,8 +1366,8 @@ function registerMarketplaceCommands(program2) {
         return response.data;
       });
       success("Purchase successful!");
-      console.log(import_chalk5.default.gray("Transaction ID:"), result.transaction.id);
-      console.log(import_chalk5.default.gray("TX Hash:"), result.txHash);
+      console.log(chalk5.gray("Transaction ID:"), result.transaction.id);
+      console.log(chalk5.gray("TX Hash:"), result.txHash);
       info("The memory has been added to your collection.");
     } catch (err) {
       error(err instanceof Error ? err.message : "Purchase failed");
@@ -1404,7 +1381,7 @@ function registerMarketplaceCommands(program2) {
     }
     let { price, days } = options;
     if (!price) {
-      const answers = await import_inquirer4.default.prompt([
+      const answers = await inquirer4.prompt([
         {
           type: "input",
           name: "price",
@@ -1438,8 +1415,8 @@ function registerMarketplaceCommands(program2) {
         return response.data;
       });
       success("Memory listed for sale!");
-      console.log(import_chalk5.default.gray("Listing ID:"), listing.id);
-      console.log(import_chalk5.default.gray("Price:"), formatEth(listing.priceEth));
+      console.log(chalk5.gray("Listing ID:"), listing.id);
+      console.log(chalk5.gray("Price:"), formatEth(listing.priceEth));
     } catch (err) {
       error(err instanceof Error ? err.message : "Failed to create listing");
     }
@@ -1469,7 +1446,7 @@ function registerMarketplaceCommands(program2) {
         l.memory?.title ? truncate(l.memory.title, 30) : "Unknown",
         formatEth(l.priceEth),
         String(l.views),
-        l.isActive ? import_chalk5.default.green("Active") : import_chalk5.default.gray("Inactive"),
+        l.isActive ? chalk5.green("Active") : chalk5.gray("Inactive"),
         formatDate(l.listedAt)
       ]);
       printTable(data, ["ID", "Title", "Price", "Views", "Status", "Listed"]);
@@ -1483,7 +1460,7 @@ function registerMarketplaceCommands(program2) {
       error("No agent selected. Run `memoreum agent use <id>` first.");
       return;
     }
-    const { confirm } = await import_inquirer4.default.prompt([
+    const { confirm } = await inquirer4.prompt([
       {
         type: "confirm",
         name: "confirm",
@@ -1508,8 +1485,8 @@ function registerMarketplaceCommands(program2) {
 }
 
 // src/cli/commands/chat.ts
-var import_inquirer5 = __toESM(require("inquirer"));
-var import_chalk6 = __toESM(require("chalk"));
+import inquirer5 from "inquirer";
+import chalk6 from "chalk";
 
 // src/ai/base.ts
 var BaseAIProvider = class {
@@ -2648,20 +2625,20 @@ function registerChatCommands(program2) {
       systemPrompt: options.system
     });
     printBox(
-      `Connected as ${import_chalk6.default.cyan(agentConfig.name)}
-Model: ${import_chalk6.default.gray(aiProvider.model || "default")}
-Provider: ${import_chalk6.default.gray(aiProvider.provider)}
+      `Connected as ${chalk6.cyan(agentConfig.name)}
+Model: ${chalk6.gray(aiProvider.model || "default")}
+Provider: ${chalk6.gray(aiProvider.provider)}
 
 Type your message and press Enter.
 Commands: /clear, /history, /model, /exit`,
       "Memoreum Agent Chat"
     );
     while (true) {
-      const { message } = await import_inquirer5.default.prompt([
+      const { message } = await inquirer5.prompt([
         {
           type: "input",
           name: "message",
-          message: import_chalk6.default.cyan("You:"),
+          message: chalk6.cyan("You:"),
           prefix: ""
         }
       ]);
@@ -2683,7 +2660,7 @@ Commands: /clear, /history, /model, /exit`,
           const history = agent.getHistory();
           history.forEach((msg, i) => {
             if (msg.role === "system") return;
-            const prefix = msg.role === "user" ? import_chalk6.default.cyan("You:") : import_chalk6.default.green("Agent:");
+            const prefix = msg.role === "user" ? chalk6.cyan("You:") : chalk6.green("Agent:");
             console.log(`${prefix} ${msg.content.slice(0, 100)}${msg.content.length > 100 ? "..." : ""}`);
           });
           continue;
@@ -2700,7 +2677,7 @@ Commands: /clear, /history, /model, /exit`,
         }
         if (cmd === "help") {
           console.log();
-          console.log(import_chalk6.default.bold("Available Commands:"));
+          console.log(chalk6.bold("Available Commands:"));
           console.log("  /clear    - Clear conversation history");
           console.log("  /history  - Show conversation history");
           console.log("  /model    - Show current model");
@@ -2713,7 +2690,7 @@ Commands: /clear, /history, /model, /exit`,
         continue;
       }
       try {
-        process.stdout.write(import_chalk6.default.green("\nAgent: "));
+        process.stdout.write(chalk6.green("\nAgent: "));
         if (options.stream) {
           for await (const chunk of agent.chatStream(message)) {
             process.stdout.write(chunk);
@@ -2748,7 +2725,7 @@ Commands: /clear, /history, /model, /exit`,
       aiProvider
     });
     try {
-      process.stdout.write(import_chalk6.default.green("Agent: "));
+      process.stdout.write(chalk6.green("Agent: "));
       for await (const chunk of agent.chatStream(message)) {
         process.stdout.write(chunk);
       }
@@ -2760,7 +2737,7 @@ Commands: /clear, /history, /model, /exit`,
 }
 
 // src/cli/commands/wallet.ts
-var import_chalk7 = __toESM(require("chalk"));
+import chalk7 from "chalk";
 function registerWalletCommands(program2) {
   const walletCmd = program2.command("wallet").description("Manage agent wallet");
   walletCmd.command("info").description("Show wallet information").action(async () => {
@@ -2781,7 +2758,7 @@ function registerWalletCommands(program2) {
       heading("Wallet Information");
       const data = [
         ["Address", agent.walletAddress],
-        ["Balance", import_chalk7.default.green(formatEth(balance.balanceEth))],
+        ["Balance", chalk7.green(formatEth(balance.balanceEth))],
         ["Network", "Base"]
       ];
       printTable(data, ["Field", "Value"]);
@@ -2805,7 +2782,7 @@ function registerWalletCommands(program2) {
         return response.data;
       });
       console.log();
-      console.log(import_chalk7.default.bold("Balance:"), import_chalk7.default.green(formatEth(balance.balanceEth)));
+      console.log(chalk7.bold("Balance:"), chalk7.green(formatEth(balance.balanceEth)));
       console.log();
     } catch (err) {
       error(err instanceof Error ? err.message : "Failed to fetch balance");
@@ -2818,7 +2795,7 @@ function registerWalletCommands(program2) {
       return;
     }
     console.log();
-    console.log(import_chalk7.default.bold("Wallet Address:"));
+    console.log(chalk7.bold("Wallet Address:"));
     console.log(agent.walletAddress);
     console.log();
     info("Send ETH to this address on Base network to fund your agent.");
@@ -2866,9 +2843,9 @@ function registerWalletCommands(program2) {
       heading("Transaction History");
       const data = transactions.slice(0, 20).map((t) => [
         t.id.slice(0, 12) + "...",
-        t.type === "Purchase" ? import_chalk7.default.red(t.type) : import_chalk7.default.green(t.type),
+        t.type === "Purchase" ? chalk7.red(t.type) : chalk7.green(t.type),
         formatEth(t.priceEth),
-        t.status === "completed" ? import_chalk7.default.green(t.status) : import_chalk7.default.yellow(t.status),
+        t.status === "completed" ? chalk7.green(t.status) : chalk7.yellow(t.status),
         new Date(t.createdAt).toLocaleDateString()
       ]);
       printTable(data, ["ID", "Type", "Amount", "Status", "Date"]);
@@ -2883,16 +2860,16 @@ function registerWalletCommands(program2) {
       return;
     }
     heading("Fund Your Wallet");
-    console.log(import_chalk7.default.bold("Your wallet address:"));
-    console.log(import_chalk7.default.cyan(agent.walletAddress));
+    console.log(chalk7.bold("Your wallet address:"));
+    console.log(chalk7.cyan(agent.walletAddress));
     console.log();
-    console.log(import_chalk7.default.bold("To fund your agent wallet:"));
+    console.log(chalk7.bold("To fund your agent wallet:"));
     console.log();
     console.log("1. Make sure you have ETH on Base network");
     console.log("2. Send ETH to the address above");
     console.log("3. Wait for the transaction to confirm");
     console.log();
-    console.log(import_chalk7.default.bold("Need Base ETH?"));
+    console.log(chalk7.bold("Need Base ETH?"));
     console.log("\u2022 Bridge from Ethereum: https://bridge.base.org");
     console.log("\u2022 Buy on exchanges that support Base");
     console.log("\u2022 Use a faucet for testnet: https://www.coinbase.com/faucets/base-ethereum-goerli-faucet");
@@ -2902,7 +2879,7 @@ function registerWalletCommands(program2) {
 }
 
 // src/cli/index.ts
-var program = new import_commander.Command();
+var program = new Command();
 program.name("memoreum").description("Memoreum CLI - AI Agent Memory Marketplace on Base Chain").version("1.0.0").hook("preAction", () => {
 });
 registerConfigCommands(program);
@@ -2913,18 +2890,19 @@ registerChatCommands(program);
 registerWalletCommands(program);
 program.action(() => {
   printWelcome();
-  console.log(import_chalk8.default.bold("Quick Start:"));
+  console.log(chalk8.bold("Quick Start:"));
   console.log();
   console.log("  1. Setup your configuration:");
-  console.log(import_chalk8.default.cyan("     memoreum config setup"));
+  console.log(chalk8.cyan("     memoreum config setup"));
   console.log();
   console.log("  2. Register a new agent:");
-  console.log(import_chalk8.default.cyan("     memoreum agent register <name>"));
+  console.log(chalk8.cyan("     memoreum agent register <name>"));
   console.log();
   console.log("  3. Start chatting:");
-  console.log(import_chalk8.default.cyan("     memoreum chat"));
+  console.log(chalk8.cyan("     memoreum chat"));
   console.log();
-  console.log(import_chalk8.default.gray("Run `memoreum --help` for all commands."));
+  console.log(chalk8.gray("Run `memoreum --help` for all commands."));
   console.log();
 });
 program.parse();
+//# sourceMappingURL=cli.mjs.map

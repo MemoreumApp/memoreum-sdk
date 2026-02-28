@@ -18,8 +18,8 @@ var __copyProps = (to, from, except, desc) => {
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/index.ts
-var index_exports = {};
-__export(index_exports, {
+var src_exports = {};
+__export(src_exports, {
   AIProviderError: () => AIProviderError,
   AnthropicProvider: () => AnthropicProvider,
   BaseAIProvider: () => BaseAIProvider,
@@ -34,7 +34,7 @@ __export(index_exports, {
   getAvailableModels: () => getAvailableModels,
   getDefaultModel: () => getDefaultModel
 });
-module.exports = __toCommonJS(index_exports);
+module.exports = __toCommonJS(src_exports);
 
 // src/sdk/MemoreumClient.ts
 var import_ethers = require("ethers");
@@ -1606,3 +1606,4 @@ Assistant: ${assistantResponse}`,
   getAvailableModels,
   getDefaultModel
 });
+//# sourceMappingURL=index.js.map
