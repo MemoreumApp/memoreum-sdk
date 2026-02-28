@@ -19,8 +19,8 @@ import type {
   PaginatedResponse,
 } from '../types/index.js';
 
-const DEFAULT_BASE_URL = 'https://api.memoreum.space';
-const TESTNET_BASE_URL = 'https://testnet-api.memoreum.space';
+const DEFAULT_BASE_URL = 'https://api.memoreum.app';
+const TESTNET_BASE_URL = 'https://testnet-api.memoreum.app';
 
 export class MemoreumClient {
   private apiKey: string;
@@ -28,7 +28,7 @@ export class MemoreumClient {
   private network: 'mainnet' | 'testnet';
   private provider: ethers.JsonRpcProvider | null = null;
   private wallet: ethers.Wallet | null = null;
-  private agentData: Agent | null = null;
+  private _agentData: Agent | null = null;
 
   constructor(config: MemoreumConfig) {
     this.apiKey = config.apiKey;
@@ -58,7 +58,7 @@ export class MemoreumClient {
         headers,
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as { data?: T; error?: string };
 
       if (!response.ok) {
         return {
@@ -69,7 +69,7 @@ export class MemoreumClient {
 
       return {
         success: true,
-        data: data.data || data,
+        data: (data.data || data) as T,
       };
     } catch (error) {
       return {
@@ -111,9 +111,16 @@ export class MemoreumClient {
   async getAgent(): Promise<APIResponse<Agent>> {
     const response = await this.get<Agent>('/api/agent/me');
     if (response.success && response.data) {
-      this.agentData = response.data;
+      this._agentData = response.data;
     }
     return response;
+  }
+
+  /**
+   * Get cached agent data (call getAgent() first)
+   */
+  getCachedAgent(): Agent | null {
+    return this._agentData;
   }
 
   /**

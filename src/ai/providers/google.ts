@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import {
   BaseAIProvider,
   AIProviderError,
@@ -8,6 +7,28 @@ import {
   type StreamChunk,
 } from '../base.js';
 import type { AIProvider } from '../../types/index.js';
+
+const GOOGLE_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+interface GoogleContent {
+  role: string;
+  parts: { text: string }[];
+}
+
+interface GoogleResponse {
+  candidates: {
+    content: {
+      parts: { text: string }[];
+      role: string;
+    };
+    finishReason: string;
+  }[];
+  usageMetadata?: {
+    promptTokenCount: number;
+    candidatesTokenCount: number;
+    totalTokenCount: number;
+  };
+}
 
 export class GoogleProvider extends BaseAIProvider {
   readonly providerName: AIProvider = 'google';
@@ -20,29 +41,20 @@ export class GoogleProvider extends BaseAIProvider {
   ];
   readonly defaultModel = 'gemini-1.5-flash';
 
-  private client: GoogleGenerativeAI;
-
-  constructor(apiKey: string, model?: string, temperature?: number, maxTokens?: number) {
-    super(apiKey, model, temperature, maxTokens);
-    this.client = new GoogleGenerativeAI(apiKey);
-  }
-
-  private convertMessages(messages: Message[]): { history: Array<{ role: string; parts: Array<{ text: string }> }>; systemInstruction?: string; latestMessage: string } {
+  private convertMessages(messages: Message[]): { contents: GoogleContent[]; systemInstruction?: { parts: { text: string }[] } } {
     const systemMessage = messages.find((m) => m.role === 'system');
     const chatMessages = messages.filter((m) => m.role !== 'system');
-    
-    // Gemini expects alternating user/model messages
-    const history = chatMessages.slice(0, -1).map((m) => ({
+
+    const contents = chatMessages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }));
 
-    const latestMessage = chatMessages[chatMessages.length - 1]?.content || '';
-
     return {
-      history,
-      systemInstruction: systemMessage?.content,
-      latestMessage,
+      contents,
+      systemInstruction: systemMessage
+        ? { parts: [{ text: systemMessage.content }] }
+        : undefined,
     };
   }
 
@@ -51,41 +63,43 @@ export class GoogleProvider extends BaseAIProvider {
     options?: CompletionOptions
   ): Promise<CompletionResult> {
     try {
-      const { history, systemInstruction, latestMessage } = this.convertMessages(messages);
+      const { contents, systemInstruction } = this.convertMessages(messages);
+      const url = `${GOOGLE_API_URL}/${this.model}:generateContent?key=${this.apiKey}`;
 
-      const model = this.client.getGenerativeModel({
-        model: this.model,
-        systemInstruction,
-        safetySettings: [
-          {
-            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-        ],
-        generationConfig: {
-          temperature: options?.temperature ?? this.defaultTemperature,
-          maxOutputTokens: options?.maxTokens ?? this.defaultMaxTokens,
-          stopSequences: options?.stopSequences,
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          contents,
+          systemInstruction,
+          generationConfig: {
+            temperature: options?.temperature ?? this.defaultTemperature,
+            maxOutputTokens: options?.maxTokens ?? this.defaultMaxTokens,
+            stopSequences: options?.stopSequences,
+          },
+        }),
       });
 
-      const chat = model.startChat({ history });
-      const result = await chat.sendMessage(latestMessage);
-      const response = result.response;
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`Google AI API error: ${error}`);
+      }
+
+      const response = (await res.json()) as GoogleResponse;
+      const candidate = response.candidates[0];
+      const text = candidate?.content?.parts?.map((p) => p.text).join('') || '';
 
       return {
-        content: response.text(),
+        content: text,
         model: this.model,
         usage: {
           promptTokens: response.usageMetadata?.promptTokenCount || 0,
           completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
           totalTokens: response.usageMetadata?.totalTokenCount || 0,
         },
-        finishReason: response.candidates?.[0]?.finishReason || 'STOP',
+        finishReason: candidate?.finishReason || 'STOP',
       };
     } catch (error) {
       throw new AIProviderError(
@@ -100,26 +114,59 @@ export class GoogleProvider extends BaseAIProvider {
     options?: CompletionOptions
   ): AsyncGenerator<StreamChunk> {
     try {
-      const { history, systemInstruction, latestMessage } = this.convertMessages(messages);
+      const { contents, systemInstruction } = this.convertMessages(messages);
+      const url = `${GOOGLE_API_URL}/${this.model}:streamGenerateContent?alt=sse&key=${this.apiKey}`;
 
-      const model = this.client.getGenerativeModel({
-        model: this.model,
-        systemInstruction,
-        generationConfig: {
-          temperature: options?.temperature ?? this.defaultTemperature,
-          maxOutputTokens: options?.maxTokens ?? this.defaultMaxTokens,
-          stopSequences: options?.stopSequences,
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          contents,
+          systemInstruction,
+          generationConfig: {
+            temperature: options?.temperature ?? this.defaultTemperature,
+            maxOutputTokens: options?.maxTokens ?? this.defaultMaxTokens,
+            stopSequences: options?.stopSequences,
+          },
+        }),
       });
 
-      const chat = model.startChat({ history });
-      const result = await chat.sendMessageStream(latestMessage);
-
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        yield { content: text, done: false };
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`Google AI API error: ${error}`);
       }
-      
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const parsed = JSON.parse(data) as GoogleResponse;
+              const text = parsed.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
+              const isDone = parsed.candidates?.[0]?.finishReason === 'STOP';
+              yield { content: text, done: isDone };
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+
       yield { content: '', done: true };
     } catch (error) {
       throw new AIProviderError(

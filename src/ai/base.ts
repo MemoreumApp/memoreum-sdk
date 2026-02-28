@@ -29,7 +29,7 @@ export interface StreamChunk {
 
 export abstract class BaseAIProvider {
   protected apiKey: string;
-  protected model: string;
+  protected _model: string | undefined;
   protected defaultTemperature: number;
   protected defaultMaxTokens: number;
 
@@ -44,9 +44,17 @@ export abstract class BaseAIProvider {
     maxTokens = 4096
   ) {
     this.apiKey = apiKey;
-    this.model = model || this.defaultModel;
+    this._model = model;
     this.defaultTemperature = temperature;
     this.defaultMaxTokens = maxTokens;
+  }
+
+  protected get model(): string {
+    return this._model || this.defaultModel;
+  }
+
+  protected set model(value: string) {
+    this._model = value;
   }
 
   abstract complete(

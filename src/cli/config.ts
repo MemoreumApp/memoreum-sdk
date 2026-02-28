@@ -10,7 +10,7 @@ const config = new Conf<{
   projectName: 'memoreum',
   defaults: {
     config: {
-      baseUrl: 'https://api.memoreum.space',
+      baseUrl: 'https://api.memoreum.app',
       network: 'mainnet',
     },
     agents: [],

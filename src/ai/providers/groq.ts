@@ -1,4 +1,3 @@
-import Groq from 'groq-sdk';
 import {
   BaseAIProvider,
   AIProviderError,
@@ -8,6 +7,28 @@ import {
   type StreamChunk,
 } from '../base.js';
 import type { AIProvider } from '../../types/index.js';
+
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+interface GroqResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: {
+    index: number;
+    message: {
+      role: string;
+      content: string;
+    };
+    finish_reason: string;
+  }[];
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
 
 export class GroqProvider extends BaseAIProvider {
   readonly providerName: AIProvider = 'groq';
@@ -21,34 +42,40 @@ export class GroqProvider extends BaseAIProvider {
   ];
   readonly defaultModel = 'llama-3.3-70b-versatile';
 
-  private client: Groq;
-
-  constructor(apiKey: string, model?: string, temperature?: number, maxTokens?: number) {
-    super(apiKey, model, temperature, maxTokens);
-    this.client = new Groq({ apiKey });
-  }
-
   async complete(
     messages: Message[],
     options?: CompletionOptions
   ): Promise<CompletionResult> {
     try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        temperature: options?.temperature ?? this.defaultTemperature,
-        max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
-        stop: options?.stopSequences,
+      const res = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          temperature: options?.temperature ?? this.defaultTemperature,
+          max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
+          stop: options?.stopSequences,
+        }),
       });
 
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`Groq API error: ${error}`);
+      }
+
+      const response = (await res.json()) as GroqResponse;
       const choice = response.choices[0];
 
       return {
         content: choice.message.content || '',
-        model: response.model,
+        model: response.model || this.model,
         usage: {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
@@ -69,23 +96,61 @@ export class GroqProvider extends BaseAIProvider {
     options?: CompletionOptions
   ): AsyncGenerator<StreamChunk> {
     try {
-      const stream = await this.client.chat.completions.create({
-        model: this.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        temperature: options?.temperature ?? this.defaultTemperature,
-        max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
-        stop: options?.stopSequences,
-        stream: true,
+      const res = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          temperature: options?.temperature ?? this.defaultTemperature,
+          max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
+          stop: options?.stopSequences,
+          stream: true,
+        }),
       });
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        const done = chunk.choices[0]?.finish_reason !== null;
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`Groq API error: ${error}`);
+      }
 
-        yield { content, done };
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              yield { content: '', done: true };
+              return;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
+              const isDone = parsed.choices[0]?.finish_reason !== null;
+              yield { content, done: isDone };
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
       }
     } catch (error) {
       throw new AIProviderError(

@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import {
   BaseAIProvider,
   AIProviderError,
@@ -8,6 +7,28 @@ import {
   type StreamChunk,
 } from '../base.js';
 import type { AIProvider } from '../../types/index.js';
+
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+interface OpenAIResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: {
+    index: number;
+    message: {
+      role: string;
+      content: string;
+    };
+    finish_reason: string;
+  }[];
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
 
 export class OpenAIProvider extends BaseAIProvider {
   readonly providerName: AIProvider = 'openai';
@@ -22,31 +43,37 @@ export class OpenAIProvider extends BaseAIProvider {
   ];
   readonly defaultModel = 'gpt-4o-mini';
 
-  private client: OpenAI;
-
-  constructor(apiKey: string, model?: string, temperature?: number, maxTokens?: number) {
-    super(apiKey, model, temperature, maxTokens);
-    this.client = new OpenAI({ apiKey });
-  }
-
   async complete(
     messages: Message[],
     options?: CompletionOptions
   ): Promise<CompletionResult> {
     try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        temperature: options?.temperature ?? this.defaultTemperature,
-        max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
-        stop: options?.stopSequences,
+      const res = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          temperature: options?.temperature ?? this.defaultTemperature,
+          max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
+          stop: options?.stopSequences,
+        }),
       });
 
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`OpenAI API error: ${error}`);
+      }
+
+      const response = (await res.json()) as OpenAIResponse;
       const choice = response.choices[0];
-      
+
       return {
         content: choice.message.content || '',
         model: response.model,
@@ -58,9 +85,6 @@ export class OpenAIProvider extends BaseAIProvider {
         finishReason: choice.finish_reason || 'stop',
       };
     } catch (error) {
-      if (error instanceof OpenAI.APIError) {
-        throw new AIProviderError(error.message, this.providerName, error.status);
-      }
       throw new AIProviderError(
         error instanceof Error ? error.message : 'Unknown error',
         this.providerName
@@ -73,28 +97,63 @@ export class OpenAIProvider extends BaseAIProvider {
     options?: CompletionOptions
   ): AsyncGenerator<StreamChunk> {
     try {
-      const stream = await this.client.chat.completions.create({
-        model: this.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        temperature: options?.temperature ?? this.defaultTemperature,
-        max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
-        stop: options?.stopSequences,
-        stream: true,
+      const res = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          temperature: options?.temperature ?? this.defaultTemperature,
+          max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
+          stop: options?.stopSequences,
+          stream: true,
+        }),
       });
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        const done = chunk.choices[0]?.finish_reason !== null;
-        
-        yield { content, done };
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`OpenAI API error: ${error}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              yield { content: '', done: true };
+              return;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
+              const isDone = parsed.choices[0]?.finish_reason !== null;
+              yield { content, done: isDone };
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
       }
     } catch (error) {
-      if (error instanceof OpenAI.APIError) {
-        throw new AIProviderError(error.message, this.providerName, error.status);
-      }
       throw new AIProviderError(
         error instanceof Error ? error.message : 'Unknown error',
         this.providerName

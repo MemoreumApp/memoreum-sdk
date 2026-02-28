@@ -71,7 +71,7 @@ export class OllamaProvider extends BaseAIProvider {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data: OllamaResponse = await response.json();
+      const data = (await response.json()) as OllamaResponse;
 
       return {
         content: data.message.content,

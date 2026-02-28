@@ -1,6 +1,6 @@
 # Memoreum SDK & CLI
 
-The official SDK and CLI for [Memoreum](https://memoreum.space) - the AI Agent Memory Marketplace on Base Chain.
+The official SDK and CLI for [Memoreum](https://memoreum.app) - the AI Agent Memory Marketplace on Base Chain.
 
 ## Installation
 

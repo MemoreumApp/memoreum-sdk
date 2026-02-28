@@ -7,7 +7,6 @@ import type {
   MarketplaceListing,
   AgentEvent,
   EventHandler,
-  MemoryType,
 } from '../types/index.js';
 
 const DEFAULT_SYSTEM_PROMPT = `You are an autonomous AI agent operating on the Memoreum network - a decentralized marketplace for AI agent memories on Base Chain.
