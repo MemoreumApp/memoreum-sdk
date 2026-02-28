@@ -90,13 +90,6 @@ export class MemoreumClient {
     });
   }
 
-  private async put<T>(endpoint: string, body: unknown): Promise<APIResponse<T>> {
-    return this.request<T>(endpoint, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    });
-  }
-
   private async delete<T>(endpoint: string): Promise<APIResponse<T>> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
@@ -109,7 +102,7 @@ export class MemoreumClient {
    * Get the current agent's profile
    */
   async getAgent(): Promise<APIResponse<Agent>> {
-    const response = await this.get<Agent>('/api/agent/me');
+    const response = await this.get<Agent>('/api/v1/auth/me');
     if (response.success && response.data) {
       this._agentData = response.data;
     }
@@ -124,24 +117,50 @@ export class MemoreumClient {
   }
 
   /**
-   * Register a new agent
+   * Register a new agent (no API key required)
    */
   async registerAgent(name: string): Promise<APIResponse<Agent>> {
-    return this.post<Agent>('/api/agents/register', { agentName: name });
+    // Registration doesn't require API key, make direct fetch call
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentName: name }),
+      });
+
+      const data = (await response.json()) as { success: boolean; data?: Agent; error?: string; message?: string };
+
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.message || data.error || `HTTP ${response.status}`,
+        };
+      }
+
+      return {
+        success: true,
+        data: data.data as Agent,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Registration failed',
+      };
+    }
   }
 
   /**
    * Get agent statistics
    */
   async getAgentStats(): Promise<APIResponse<AgentStats>> {
-    return this.get<AgentStats>('/api/agent/stats');
+    return this.get<AgentStats>('/api/v1/analytics/me');
   }
 
   /**
-   * Update agent profile
+   * Regenerate API key
    */
-  async updateAgent(updates: Partial<Pick<Agent, 'agentName' | 'isActive'>>): Promise<APIResponse<Agent>> {
-    return this.put<Agent>('/api/agent/me', updates);
+  async regenerateApiKey(): Promise<APIResponse<{ apiKey: string }>> {
+    return this.post<{ apiKey: string }>('/api/v1/auth/regenerate-key', {});
   }
 
   // ============================================
@@ -152,15 +171,14 @@ export class MemoreumClient {
    * Store a new memory
    */
   async storeMemory(input: CreateMemoryInput): Promise<APIResponse<Memory>> {
-    return this.post<Memory>('/api/memories', {
-      memory_type: input.memoryType,
+    return this.post<Memory>('/api/v1/memories', {
       title: input.title,
-      content: input.content,
-      importance: input.importance ?? 0.5,
+      description: input.content,
+      categoryId: input.categoryId,
+      memoryData: input.memoryData,
       tags: input.tags ?? [],
-      metadata: input.metadata ?? {},
-      is_public: input.isPublic ?? false,
-      store_on_chain: input.storeOnChain ?? false,
+      isForSale: input.isPublic ?? false,
+      priceEth: input.priceEth,
     });
   }
 
@@ -168,7 +186,7 @@ export class MemoreumClient {
    * Get a memory by ID
    */
   async getMemory(memoryId: string): Promise<APIResponse<Memory>> {
-    return this.get<Memory>(`/api/memories/${memoryId}`);
+    return this.get<Memory>(`/api/v1/memories/${memoryId}`);
   }
 
   /**
@@ -177,23 +195,23 @@ export class MemoreumClient {
   async listMemories(params?: MemorySearchParams): Promise<APIResponse<PaginatedResponse<Memory>>> {
     const queryParams = new URLSearchParams();
     
-    if (params?.query) queryParams.set('query', params.query);
-    if (params?.memoryType) queryParams.set('memory_type', params.memoryType);
-    if (params?.tags?.length) queryParams.set('tags', params.tags.join(','));
-    if (params?.minImportance) queryParams.set('min_importance', String(params.minImportance));
-    if (params?.isPublic !== undefined) queryParams.set('is_public', String(params.isPublic));
+    if (params?.isPublic !== undefined) queryParams.set('isForSale', String(params.isPublic));
+    if (params?.categoryId) queryParams.set('categoryId', String(params.categoryId));
     if (params?.limit) queryParams.set('limit', String(params.limit));
-    if (params?.offset) queryParams.set('offset', String(params.offset));
+    if (params?.offset) queryParams.set('page', String(Math.floor((params.offset || 0) / (params.limit || 20)) + 1));
 
     const query = queryParams.toString();
-    return this.get<PaginatedResponse<Memory>>(`/api/memories${query ? `?${query}` : ''}`);
+    return this.get<PaginatedResponse<Memory>>(`/api/v1/memories${query ? `?${query}` : ''}`);
   }
 
   /**
-   * Search memories semantically
+   * Search marketplace memories
    */
   async searchMemories(query: string, limit = 10): Promise<APIResponse<Memory[]>> {
-    return this.post<Memory[]>('/api/memories/search', { query, limit });
+    const queryParams = new URLSearchParams();
+    queryParams.set('q', query);
+    queryParams.set('limit', String(limit));
+    return this.get<Memory[]>(`/api/v1/memories/search/marketplace?${queryParams.toString()}`);
   }
 
   /**
@@ -201,16 +219,39 @@ export class MemoreumClient {
    */
   async updateMemory(
     memoryId: string,
-    updates: Partial<Pick<CreateMemoryInput, 'title' | 'content' | 'importance' | 'tags' | 'isPublic'>>
+    updates: Partial<Pick<CreateMemoryInput, 'title' | 'content' | 'tags' | 'isPublic' | 'priceEth'>>
   ): Promise<APIResponse<Memory>> {
-    return this.put<Memory>(`/api/memories/${memoryId}`, updates);
+    return this.request<Memory>(`/api/v1/memories/${memoryId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        title: updates.title,
+        description: updates.content,
+        tags: updates.tags,
+        isForSale: updates.isPublic,
+        priceEth: updates.priceEth,
+      }),
+    });
   }
 
   /**
    * Delete a memory
    */
   async deleteMemory(memoryId: string): Promise<APIResponse<{ deleted: boolean }>> {
-    return this.delete<{ deleted: boolean }>(`/api/memories/${memoryId}`);
+    return this.delete<{ deleted: boolean }>(`/api/v1/memories/${memoryId}`);
+  }
+
+  /**
+   * Get memory template
+   */
+  async getMemoryTemplate(): Promise<APIResponse<unknown>> {
+    return this.get<unknown>('/api/v1/memories/template');
+  }
+
+  /**
+   * Get memory categories
+   */
+  async getCategories(): Promise<APIResponse<unknown[]>> {
+    return this.get<unknown[]>('/api/v1/memories/categories');
   }
 
   // ============================================
@@ -221,10 +262,10 @@ export class MemoreumClient {
    * List a memory for sale
    */
   async createListing(input: CreateListingInput): Promise<APIResponse<MarketplaceListing>> {
-    return this.post<MarketplaceListing>('/api/marketplace/listings', {
-      memory_id: input.memoryId,
-      price_eth: input.priceEth,
-      expires_in_days: input.expiresInDays,
+    return this.post<MarketplaceListing>('/api/v1/marketplace/listings', {
+      memoryId: input.memoryId,
+      priceEth: input.priceEth,
+      expiresAt: input.expiresAt,
     });
   }
 
@@ -232,7 +273,7 @@ export class MemoreumClient {
    * Get a listing by ID
    */
   async getListing(listingId: string): Promise<APIResponse<MarketplaceListing>> {
-    return this.get<MarketplaceListing>(`/api/marketplace/listings/${listingId}`);
+    return this.get<MarketplaceListing>(`/api/v1/marketplace/listings/${listingId}`);
   }
 
   /**
@@ -241,25 +282,22 @@ export class MemoreumClient {
   async browseMarketplace(params?: MarketplaceSearchParams): Promise<APIResponse<PaginatedResponse<MarketplaceListing>>> {
     const queryParams = new URLSearchParams();
     
-    if (params?.query) queryParams.set('query', params.query);
-    if (params?.memoryType) queryParams.set('memory_type', params.memoryType);
-    if (params?.minPrice) queryParams.set('min_price', params.minPrice);
-    if (params?.maxPrice) queryParams.set('max_price', params.maxPrice);
-    if (params?.sellerId) queryParams.set('seller_id', params.sellerId);
-    if (params?.tags?.length) queryParams.set('tags', params.tags.join(','));
-    if (params?.sortBy) queryParams.set('sort_by', params.sortBy);
+    if (params?.categoryId) queryParams.set('categoryId', String(params.categoryId));
+    if (params?.minPrice) queryParams.set('minPrice', params.minPrice);
+    if (params?.maxPrice) queryParams.set('maxPrice', params.maxPrice);
+    if (params?.sortBy) queryParams.set('sortBy', params.sortBy);
     if (params?.limit) queryParams.set('limit', String(params.limit));
-    if (params?.offset) queryParams.set('offset', String(params.offset));
+    if (params?.offset) queryParams.set('page', String(Math.floor((params.offset || 0) / (params.limit || 20)) + 1));
 
     const query = queryParams.toString();
-    return this.get<PaginatedResponse<MarketplaceListing>>(`/api/marketplace/listings${query ? `?${query}` : ''}`);
+    return this.get<PaginatedResponse<MarketplaceListing>>(`/api/v1/marketplace${query ? `?${query}` : ''}`);
   }
 
   /**
    * Get my listings
    */
   async getMyListings(): Promise<APIResponse<MarketplaceListing[]>> {
-    return this.get<MarketplaceListing[]>('/api/marketplace/my-listings');
+    return this.get<MarketplaceListing[]>('/api/v1/marketplace/my-listings');
   }
 
   /**
@@ -269,14 +307,20 @@ export class MemoreumClient {
     listingId: string,
     updates: Partial<Pick<CreateListingInput, 'priceEth'> & { isActive: boolean }>
   ): Promise<APIResponse<MarketplaceListing>> {
-    return this.put<MarketplaceListing>(`/api/marketplace/listings/${listingId}`, updates);
+    return this.request<MarketplaceListing>(`/api/v1/marketplace/listings/${listingId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
   }
 
   /**
-   * Remove a listing
+   * Remove a listing (deactivate)
    */
   async removeListing(listingId: string): Promise<APIResponse<{ removed: boolean }>> {
-    return this.delete<{ removed: boolean }>(`/api/marketplace/listings/${listingId}`);
+    return this.request<{ removed: boolean }>(`/api/v1/marketplace/listings/${listingId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive: false }),
+    });
   }
 
   // ============================================
@@ -287,37 +331,49 @@ export class MemoreumClient {
    * Purchase a memory from the marketplace
    */
   async purchaseMemory(input: PurchaseInput): Promise<APIResponse<PurchaseResult>> {
-    return this.post<PurchaseResult>('/api/marketplace/purchase', {
-      listing_id: input.listingId,
-    });
+    return this.post<PurchaseResult>(`/api/v1/marketplace/listings/${input.listingId}/purchase`, {});
+  }
+
+  /**
+   * Get transaction history
+   */
+  async getTransactionHistory(type: 'all' | 'purchases' | 'sales' = 'all'): Promise<APIResponse<Transaction[]>> {
+    return this.get<Transaction[]>(`/api/v1/marketplace/transactions?type=${type}`);
   }
 
   /**
    * Get purchase history
    */
   async getPurchaseHistory(): Promise<APIResponse<Transaction[]>> {
-    return this.get<Transaction[]>('/api/transactions/purchases');
+    return this.getTransactionHistory('purchases');
   }
 
   /**
    * Get sales history
    */
   async getSalesHistory(): Promise<APIResponse<Transaction[]>> {
-    return this.get<Transaction[]>('/api/transactions/sales');
+    return this.getTransactionHistory('sales');
   }
 
   /**
    * Get transaction by ID
    */
   async getTransaction(transactionId: string): Promise<APIResponse<Transaction>> {
-    return this.get<Transaction>(`/api/transactions/${transactionId}`);
+    return this.get<Transaction>(`/api/v1/marketplace/transactions/${transactionId}`);
   }
 
   /**
    * Get purchased memories
    */
   async getPurchasedMemories(): Promise<APIResponse<Memory[]>> {
-    return this.get<Memory[]>('/api/memories/purchased');
+    return this.get<Memory[]>('/api/v1/memories/purchased');
+  }
+
+  /**
+   * Get marketplace info
+   */
+  async getMarketplaceInfo(): Promise<APIResponse<unknown>> {
+    return this.get<unknown>('/api/v1/marketplace/info');
   }
 
   // ============================================
@@ -403,7 +459,21 @@ export class MemoreumClient {
    * Get wallet balance from API
    */
   async getBalance(): Promise<APIResponse<{ balanceEth: string }>> {
-    return this.get<{ balanceEth: string }>('/api/wallet/balance');
+    return this.get<{ balanceEth: string }>('/api/v1/auth/wallet/balance');
+  }
+
+  /**
+   * Get full wallet info from API
+   */
+  async getWalletFromApi(): Promise<APIResponse<WalletInfo>> {
+    return this.get<WalletInfo>('/api/v1/auth/wallet');
+  }
+
+  /**
+   * Transfer ETH via API
+   */
+  async transferViaApi(toAddress: string, amountEth: number): Promise<APIResponse<TransferResult>> {
+    return this.post<TransferResult>('/api/v1/auth/wallet/transfer', { toAddress, amountEth });
   }
 
   // ============================================

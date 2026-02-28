@@ -1,43 +1,5 @@
-"use strict";
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// src/index.ts
-var index_exports = {};
-__export(index_exports, {
-  AIProviderError: () => AIProviderError,
-  AnthropicProvider: () => AnthropicProvider,
-  BaseAIProvider: () => BaseAIProvider,
-  GoogleProvider: () => GoogleProvider,
-  GroqProvider: () => GroqProvider,
-  MemoreumAgent: () => MemoreumAgent,
-  MemoreumClient: () => MemoreumClient,
-  OllamaProvider: () => OllamaProvider,
-  OpenAIProvider: () => OpenAIProvider,
-  TogetherProvider: () => TogetherProvider,
-  createProvider: () => createProvider,
-  getAvailableModels: () => getAvailableModels,
-  getDefaultModel: () => getDefaultModel
-});
-module.exports = __toCommonJS(index_exports);
-
 // src/sdk/MemoreumClient.ts
-var import_ethers = require("ethers");
+import { ethers } from "ethers";
 var DEFAULT_BASE_URL = "https://api.memoreum.app";
 var TESTNET_BASE_URL = "https://testnet-api.memoreum.app";
 var MemoreumClient = class {
@@ -91,6 +53,12 @@ var MemoreumClient = class {
   async post(endpoint, body) {
     return this.request(endpoint, {
       method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
+  async put(endpoint, body) {
+    return this.request(endpoint, {
+      method: "PUT",
       body: JSON.stringify(body)
     });
   }
@@ -343,8 +311,8 @@ var MemoreumClient = class {
    */
   async initializeWallet(privateKey) {
     const rpcUrl = this.network === "mainnet" ? "https://mainnet.base.org" : "https://sepolia.base.org";
-    this.provider = new import_ethers.ethers.JsonRpcProvider(rpcUrl);
-    this.wallet = new import_ethers.ethers.Wallet(privateKey, this.provider);
+    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    this.wallet = new ethers.Wallet(privateKey, this.provider);
   }
   /**
    * Get wallet information
@@ -360,7 +328,7 @@ var MemoreumClient = class {
         success: true,
         data: {
           address: this.wallet.address,
-          balanceEth: import_ethers.ethers.formatEther(balance),
+          balanceEth: ethers.formatEther(balance),
           balanceWei: balance.toString(),
           network: network.name
         }
@@ -382,7 +350,7 @@ var MemoreumClient = class {
     try {
       const tx = await this.wallet.sendTransaction({
         to: input.to,
-        value: import_ethers.ethers.parseEther(input.amountEth)
+        value: ethers.parseEther(input.amountEth)
       });
       const receipt = await tx.wait();
       return {
@@ -427,7 +395,7 @@ var MemoreumClient = class {
    * Generate content hash for a memory
    */
   generateContentHash(content) {
-    return import_ethers.ethers.keccak256(import_ethers.ethers.toUtf8Bytes(content));
+    return ethers.keccak256(ethers.toUtf8Bytes(content));
   }
   /**
    * Verify API key is valid
@@ -1590,19 +1558,19 @@ Assistant: ${assistantResponse}`,
     return this.isRunning;
   }
 };
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  AIProviderError,
-  AnthropicProvider,
+
+export {
+  MemoreumClient,
   BaseAIProvider,
+  AIProviderError,
+  OpenAIProvider,
+  AnthropicProvider,
   GoogleProvider,
   GroqProvider,
-  MemoreumAgent,
-  MemoreumClient,
-  OllamaProvider,
-  OpenAIProvider,
   TogetherProvider,
+  OllamaProvider,
   createProvider,
   getAvailableModels,
-  getDefaultModel
-});
+  getDefaultModel,
+  MemoreumAgent
+};

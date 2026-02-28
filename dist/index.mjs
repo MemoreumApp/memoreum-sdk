@@ -12,7 +12,7 @@ import {
   createProvider,
   getAvailableModels,
   getDefaultModel
-} from "./chunk-KGPFO2HP.mjs";
+} from "./chunk-PE7TF2ZU.mjs";
 export {
   AIProviderError,
   AnthropicProvider,

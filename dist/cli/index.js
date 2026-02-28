@@ -52,9 +52,6 @@ function setConfig(updates) {
   const current = getConfig();
   config.set("config", { ...current, ...updates });
 }
-function getApiKey() {
-  return getConfig().apiKey;
-}
 function setApiKey(apiKey) {
   setConfig({ apiKey });
 }
@@ -175,12 +172,6 @@ var MemoreumClient = class {
       body: JSON.stringify(body)
     });
   }
-  async put(endpoint, body) {
-    return this.request(endpoint, {
-      method: "PUT",
-      body: JSON.stringify(body)
-    });
-  }
   async delete(endpoint) {
     return this.request(endpoint, { method: "DELETE" });
   }
@@ -191,7 +182,7 @@ var MemoreumClient = class {
    * Get the current agent's profile
    */
   async getAgent() {
-    const response = await this.get("/api/agent/me");
+    const response = await this.get("/api/v1/auth/me");
     if (response.success && response.data) {
       this._agentData = response.data;
     }
@@ -204,22 +195,44 @@ var MemoreumClient = class {
     return this._agentData;
   }
   /**
-   * Register a new agent
+   * Register a new agent (no API key required)
    */
   async registerAgent(name) {
-    return this.post("/api/agents/register", { agentName: name });
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentName: name })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          error: data.message || data.error || `HTTP ${response.status}`
+        };
+      }
+      return {
+        success: true,
+        data: data.data
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Registration failed"
+      };
+    }
   }
   /**
    * Get agent statistics
    */
   async getAgentStats() {
-    return this.get("/api/agent/stats");
+    return this.get("/api/v1/analytics/me");
   }
   /**
-   * Update agent profile
+   * Regenerate API key
    */
-  async updateAgent(updates) {
-    return this.put("/api/agent/me", updates);
+  async regenerateApiKey() {
+    return this.post("/api/v1/auth/regenerate-key", {});
   }
   // ============================================
   // Memory Methods
@@ -228,55 +241,75 @@ var MemoreumClient = class {
    * Store a new memory
    */
   async storeMemory(input) {
-    return this.post("/api/memories", {
-      memory_type: input.memoryType,
+    return this.post("/api/v1/memories", {
       title: input.title,
-      content: input.content,
-      importance: input.importance ?? 0.5,
+      description: input.content,
+      categoryId: input.categoryId,
+      memoryData: input.memoryData,
       tags: input.tags ?? [],
-      metadata: input.metadata ?? {},
-      is_public: input.isPublic ?? false,
-      store_on_chain: input.storeOnChain ?? false
+      isForSale: input.isPublic ?? false,
+      priceEth: input.priceEth
     });
   }
   /**
    * Get a memory by ID
    */
   async getMemory(memoryId) {
-    return this.get(`/api/memories/${memoryId}`);
+    return this.get(`/api/v1/memories/${memoryId}`);
   }
   /**
    * List agent's memories
    */
   async listMemories(params) {
     const queryParams = new URLSearchParams();
-    if (params?.query) queryParams.set("query", params.query);
-    if (params?.memoryType) queryParams.set("memory_type", params.memoryType);
-    if (params?.tags?.length) queryParams.set("tags", params.tags.join(","));
-    if (params?.minImportance) queryParams.set("min_importance", String(params.minImportance));
-    if (params?.isPublic !== void 0) queryParams.set("is_public", String(params.isPublic));
+    if (params?.isPublic !== void 0) queryParams.set("isForSale", String(params.isPublic));
+    if (params?.categoryId) queryParams.set("categoryId", String(params.categoryId));
     if (params?.limit) queryParams.set("limit", String(params.limit));
-    if (params?.offset) queryParams.set("offset", String(params.offset));
+    if (params?.offset) queryParams.set("page", String(Math.floor((params.offset || 0) / (params.limit || 20)) + 1));
     const query = queryParams.toString();
-    return this.get(`/api/memories${query ? `?${query}` : ""}`);
+    return this.get(`/api/v1/memories${query ? `?${query}` : ""}`);
   }
   /**
-   * Search memories semantically
+   * Search marketplace memories
    */
   async searchMemories(query, limit = 10) {
-    return this.post("/api/memories/search", { query, limit });
+    const queryParams = new URLSearchParams();
+    queryParams.set("q", query);
+    queryParams.set("limit", String(limit));
+    return this.get(`/api/v1/memories/search/marketplace?${queryParams.toString()}`);
   }
   /**
    * Update a memory
    */
   async updateMemory(memoryId, updates) {
-    return this.put(`/api/memories/${memoryId}`, updates);
+    return this.request(`/api/v1/memories/${memoryId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: updates.title,
+        description: updates.content,
+        tags: updates.tags,
+        isForSale: updates.isPublic,
+        priceEth: updates.priceEth
+      })
+    });
   }
   /**
    * Delete a memory
    */
   async deleteMemory(memoryId) {
-    return this.delete(`/api/memories/${memoryId}`);
+    return this.delete(`/api/v1/memories/${memoryId}`);
+  }
+  /**
+   * Get memory template
+   */
+  async getMemoryTemplate() {
+    return this.get("/api/v1/memories/template");
+  }
+  /**
+   * Get memory categories
+   */
+  async getCategories() {
+    return this.get("/api/v1/memories/categories");
   }
   // ============================================
   // Marketplace Methods
@@ -285,52 +318,55 @@ var MemoreumClient = class {
    * List a memory for sale
    */
   async createListing(input) {
-    return this.post("/api/marketplace/listings", {
-      memory_id: input.memoryId,
-      price_eth: input.priceEth,
-      expires_in_days: input.expiresInDays
+    return this.post("/api/v1/marketplace/listings", {
+      memoryId: input.memoryId,
+      priceEth: input.priceEth,
+      expiresAt: input.expiresAt
     });
   }
   /**
    * Get a listing by ID
    */
   async getListing(listingId) {
-    return this.get(`/api/marketplace/listings/${listingId}`);
+    return this.get(`/api/v1/marketplace/listings/${listingId}`);
   }
   /**
    * Browse marketplace listings
    */
   async browseMarketplace(params) {
     const queryParams = new URLSearchParams();
-    if (params?.query) queryParams.set("query", params.query);
-    if (params?.memoryType) queryParams.set("memory_type", params.memoryType);
-    if (params?.minPrice) queryParams.set("min_price", params.minPrice);
-    if (params?.maxPrice) queryParams.set("max_price", params.maxPrice);
-    if (params?.sellerId) queryParams.set("seller_id", params.sellerId);
-    if (params?.tags?.length) queryParams.set("tags", params.tags.join(","));
-    if (params?.sortBy) queryParams.set("sort_by", params.sortBy);
+    if (params?.categoryId) queryParams.set("categoryId", String(params.categoryId));
+    if (params?.minPrice) queryParams.set("minPrice", params.minPrice);
+    if (params?.maxPrice) queryParams.set("maxPrice", params.maxPrice);
+    if (params?.sortBy) queryParams.set("sortBy", params.sortBy);
     if (params?.limit) queryParams.set("limit", String(params.limit));
-    if (params?.offset) queryParams.set("offset", String(params.offset));
+    if (params?.offset) queryParams.set("page", String(Math.floor((params.offset || 0) / (params.limit || 20)) + 1));
     const query = queryParams.toString();
-    return this.get(`/api/marketplace/listings${query ? `?${query}` : ""}`);
+    return this.get(`/api/v1/marketplace${query ? `?${query}` : ""}`);
   }
   /**
    * Get my listings
    */
   async getMyListings() {
-    return this.get("/api/marketplace/my-listings");
+    return this.get("/api/v1/marketplace/my-listings");
   }
   /**
    * Update a listing
    */
   async updateListing(listingId, updates) {
-    return this.put(`/api/marketplace/listings/${listingId}`, updates);
+    return this.request(`/api/v1/marketplace/listings/${listingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates)
+    });
   }
   /**
-   * Remove a listing
+   * Remove a listing (deactivate)
    */
   async removeListing(listingId) {
-    return this.delete(`/api/marketplace/listings/${listingId}`);
+    return this.request(`/api/v1/marketplace/listings/${listingId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive: false })
+    });
   }
   // ============================================
   // Purchase Methods
@@ -339,33 +375,43 @@ var MemoreumClient = class {
    * Purchase a memory from the marketplace
    */
   async purchaseMemory(input) {
-    return this.post("/api/marketplace/purchase", {
-      listing_id: input.listingId
-    });
+    return this.post(`/api/v1/marketplace/listings/${input.listingId}/purchase`, {});
+  }
+  /**
+   * Get transaction history
+   */
+  async getTransactionHistory(type = "all") {
+    return this.get(`/api/v1/marketplace/transactions?type=${type}`);
   }
   /**
    * Get purchase history
    */
   async getPurchaseHistory() {
-    return this.get("/api/transactions/purchases");
+    return this.getTransactionHistory("purchases");
   }
   /**
    * Get sales history
    */
   async getSalesHistory() {
-    return this.get("/api/transactions/sales");
+    return this.getTransactionHistory("sales");
   }
   /**
    * Get transaction by ID
    */
   async getTransaction(transactionId) {
-    return this.get(`/api/transactions/${transactionId}`);
+    return this.get(`/api/v1/marketplace/transactions/${transactionId}`);
   }
   /**
    * Get purchased memories
    */
   async getPurchasedMemories() {
-    return this.get("/api/memories/purchased");
+    return this.get("/api/v1/memories/purchased");
+  }
+  /**
+   * Get marketplace info
+   */
+  async getMarketplaceInfo() {
+    return this.get("/api/v1/marketplace/info");
   }
   // ============================================
   // Wallet Methods
@@ -438,7 +484,19 @@ var MemoreumClient = class {
    * Get wallet balance from API
    */
   async getBalance() {
-    return this.get("/api/wallet/balance");
+    return this.get("/api/v1/auth/wallet/balance");
+  }
+  /**
+   * Get full wallet info from API
+   */
+  async getWalletFromApi() {
+    return this.get("/api/v1/auth/wallet");
+  }
+  /**
+   * Transfer ETH via API
+   */
+  async transferViaApi(toAddress, amountEth) {
+    return this.post("/api/v1/auth/wallet/transfer", { toAddress, amountEth });
   }
   // ============================================
   // Utility Methods
@@ -747,13 +805,8 @@ var import_chalk3 = __toESM(require("chalk"));
 function registerAgentCommands(program2) {
   const agentCmd = program2.command("agent").description("Manage Memoreum agents");
   agentCmd.command("register <name>").description("Register a new agent on Memoreum").action(async (name) => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      error("No API key configured. Run `memoreum config set-key <key>` first.");
-      return;
-    }
     try {
-      const client = new MemoreumClient({ apiKey });
+      const client = new MemoreumClient({ apiKey: "" });
       const agent = await withSpinner("Registering agent...", async () => {
         const response = await client.registerAgent(name);
         if (!response.success || !response.data) {
@@ -761,22 +814,27 @@ function registerAgentCommands(program2) {
         }
         return response.data;
       });
+      const agentData = agent;
       const localAgent = {
-        id: agent.id,
-        name: agent.agentName,
-        apiKey: agent.apiKey,
-        walletAddress: agent.walletAddress,
+        id: agentData.agentId,
+        name: agentData.agentName,
+        apiKey: agentData.apiKey,
+        walletAddress: agentData.wallet.address,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       addAgent(localAgent);
-      setCurrentAgent(agent.id);
+      setCurrentAgent(agentData.agentId);
       success(`Agent "${name}" registered successfully!`);
       console.log();
-      console.log(import_chalk3.default.gray("Agent ID:"), agent.id);
-      console.log(import_chalk3.default.gray("API Key:"), agent.apiKey);
-      console.log(import_chalk3.default.gray("Wallet:"), agent.walletAddress);
+      console.log(import_chalk3.default.gray("Agent ID:"), agentData.agentId);
+      console.log(import_chalk3.default.gray("API Key:"), agentData.apiKey);
+      console.log(import_chalk3.default.gray("Wallet:"), agentData.wallet.address);
       console.log();
-      warn("Save your API key securely - it cannot be retrieved later!");
+      console.log(import_chalk3.default.yellow("IMPORTANT: Save these credentials securely!"));
+      console.log(import_chalk3.default.gray("Private Key:"), agentData.wallet.privateKey);
+      console.log(import_chalk3.default.gray("Mnemonic:"), agentData.wallet.mnemonic);
+      console.log();
+      warn("These credentials cannot be retrieved later!");
     } catch (err) {
       error(err instanceof Error ? err.message : "Failed to register agent");
     }

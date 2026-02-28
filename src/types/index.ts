@@ -115,19 +115,23 @@ export interface MemoryMetadata {
 }
 
 export interface CreateMemoryInput {
-  memoryType: MemoryType;
+  memoryType?: MemoryType;
   title: string;
   content: string;
+  categoryId?: number;
+  memoryData?: unknown;
   importance?: number;
   tags?: string[];
   metadata?: MemoryMetadata;
   isPublic?: boolean;
+  priceEth?: number;
   storeOnChain?: boolean;
 }
 
 export interface MemorySearchParams {
   query?: string;
   memoryType?: MemoryType;
+  categoryId?: number;
   tags?: string[];
   minImportance?: number;
   isPublic?: boolean;
@@ -158,17 +162,19 @@ export interface MarketplaceListing {
 export interface CreateListingInput {
   memoryId: string;
   priceEth: string;
+  expiresAt?: string;
   expiresInDays?: number;
 }
 
 export interface MarketplaceSearchParams {
   query?: string;
   memoryType?: MemoryType;
+  categoryId?: number;
   minPrice?: string;
   maxPrice?: string;
   sellerId?: string;
   tags?: string[];
-  sortBy?: 'price_asc' | 'price_desc' | 'recent' | 'popular';
+  sortBy?: 'newest' | 'price_low' | 'price_high' | 'popular';
   limit?: number;
   offset?: number;
 }

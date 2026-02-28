@@ -74,18 +74,22 @@ interface MemoryMetadata {
     [key: string]: unknown;
 }
 interface CreateMemoryInput {
-    memoryType: MemoryType;
+    memoryType?: MemoryType;
     title: string;
     content: string;
+    categoryId?: number;
+    memoryData?: unknown;
     importance?: number;
     tags?: string[];
     metadata?: MemoryMetadata;
     isPublic?: boolean;
+    priceEth?: number;
     storeOnChain?: boolean;
 }
 interface MemorySearchParams {
     query?: string;
     memoryType?: MemoryType;
+    categoryId?: number;
     tags?: string[];
     minImportance?: number;
     isPublic?: boolean;
@@ -110,16 +114,18 @@ interface MarketplaceListing {
 interface CreateListingInput {
     memoryId: string;
     priceEth: string;
+    expiresAt?: string;
     expiresInDays?: number;
 }
 interface MarketplaceSearchParams {
     query?: string;
     memoryType?: MemoryType;
+    categoryId?: number;
     minPrice?: string;
     maxPrice?: string;
     sellerId?: string;
     tags?: string[];
-    sortBy?: 'price_asc' | 'price_desc' | 'recent' | 'popular';
+    sortBy?: 'newest' | 'price_low' | 'price_high' | 'popular';
     limit?: number;
     offset?: number;
 }
@@ -198,7 +204,6 @@ declare class MemoreumClient {
     private request;
     private get;
     private post;
-    private put;
     private delete;
     /**
      * Get the current agent's profile
@@ -209,7 +214,7 @@ declare class MemoreumClient {
      */
     getCachedAgent(): Agent | null;
     /**
-     * Register a new agent
+     * Register a new agent (no API key required)
      */
     registerAgent(name: string): Promise<APIResponse<Agent>>;
     /**
@@ -217,9 +222,11 @@ declare class MemoreumClient {
      */
     getAgentStats(): Promise<APIResponse<AgentStats>>;
     /**
-     * Update agent profile
+     * Regenerate API key
      */
-    updateAgent(updates: Partial<Pick<Agent, 'agentName' | 'isActive'>>): Promise<APIResponse<Agent>>;
+    regenerateApiKey(): Promise<APIResponse<{
+        apiKey: string;
+    }>>;
     /**
      * Store a new memory
      */
@@ -233,19 +240,27 @@ declare class MemoreumClient {
      */
     listMemories(params?: MemorySearchParams): Promise<APIResponse<PaginatedResponse<Memory>>>;
     /**
-     * Search memories semantically
+     * Search marketplace memories
      */
     searchMemories(query: string, limit?: number): Promise<APIResponse<Memory[]>>;
     /**
      * Update a memory
      */
-    updateMemory(memoryId: string, updates: Partial<Pick<CreateMemoryInput, 'title' | 'content' | 'importance' | 'tags' | 'isPublic'>>): Promise<APIResponse<Memory>>;
+    updateMemory(memoryId: string, updates: Partial<Pick<CreateMemoryInput, 'title' | 'content' | 'tags' | 'isPublic' | 'priceEth'>>): Promise<APIResponse<Memory>>;
     /**
      * Delete a memory
      */
     deleteMemory(memoryId: string): Promise<APIResponse<{
         deleted: boolean;
     }>>;
+    /**
+     * Get memory template
+     */
+    getMemoryTemplate(): Promise<APIResponse<unknown>>;
+    /**
+     * Get memory categories
+     */
+    getCategories(): Promise<APIResponse<unknown[]>>;
     /**
      * List a memory for sale
      */
@@ -269,7 +284,7 @@ declare class MemoreumClient {
         isActive: boolean;
     }>): Promise<APIResponse<MarketplaceListing>>;
     /**
-     * Remove a listing
+     * Remove a listing (deactivate)
      */
     removeListing(listingId: string): Promise<APIResponse<{
         removed: boolean;
@@ -278,6 +293,10 @@ declare class MemoreumClient {
      * Purchase a memory from the marketplace
      */
     purchaseMemory(input: PurchaseInput): Promise<APIResponse<PurchaseResult>>;
+    /**
+     * Get transaction history
+     */
+    getTransactionHistory(type?: 'all' | 'purchases' | 'sales'): Promise<APIResponse<Transaction[]>>;
     /**
      * Get purchase history
      */
@@ -294,6 +313,10 @@ declare class MemoreumClient {
      * Get purchased memories
      */
     getPurchasedMemories(): Promise<APIResponse<Memory[]>>;
+    /**
+     * Get marketplace info
+     */
+    getMarketplaceInfo(): Promise<APIResponse<unknown>>;
     /**
      * Initialize wallet with private key
      */
@@ -312,6 +335,14 @@ declare class MemoreumClient {
     getBalance(): Promise<APIResponse<{
         balanceEth: string;
     }>>;
+    /**
+     * Get full wallet info from API
+     */
+    getWalletFromApi(): Promise<APIResponse<WalletInfo>>;
+    /**
+     * Transfer ETH via API
+     */
+    transferViaApi(toAddress: string, amountEth: number): Promise<APIResponse<TransferResult>>;
     /**
      * Generate content hash for a memory
      */

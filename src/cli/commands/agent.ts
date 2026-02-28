@@ -33,14 +33,9 @@ export function registerAgentCommands(program: Command): void {
     .command('register <name>')
     .description('Register a new agent on Memoreum')
     .action(async (name: string) => {
-      const apiKey = getApiKey();
-      if (!apiKey) {
-        error('No API key configured. Run `memoreum config set-key <key>` first.');
-        return;
-      }
-
       try {
-        const client = new MemoreumClient({ apiKey });
+        // Registration doesn't need an API key - create client with empty key
+        const client = new MemoreumClient({ apiKey: '' });
         
         const agent = await withSpinner('Registering agent...', async () => {
           const response = await client.registerAgent(name);
@@ -50,24 +45,40 @@ export function registerAgentCommands(program: Command): void {
           return response.data;
         });
 
+        // The response includes agentId, agentName, apiKey, wallet info
+        const agentData = agent as unknown as {
+          agentId: string;
+          agentName: string;
+          apiKey: string;
+          wallet: {
+            address: string;
+            privateKey: string;
+            mnemonic: string;
+          };
+        };
+
         // Save locally
         const localAgent: LocalAgentConfig = {
-          id: agent.id,
-          name: agent.agentName,
-          apiKey: agent.apiKey,
-          walletAddress: agent.walletAddress,
+          id: agentData.agentId,
+          name: agentData.agentName,
+          apiKey: agentData.apiKey,
+          walletAddress: agentData.wallet.address,
           createdAt: new Date().toISOString(),
         };
         addAgent(localAgent);
-        setCurrentAgent(agent.id);
+        setCurrentAgent(agentData.agentId);
 
         success(`Agent "${name}" registered successfully!`);
         console.log();
-        console.log(chalk.gray('Agent ID:'), agent.id);
-        console.log(chalk.gray('API Key:'), agent.apiKey);
-        console.log(chalk.gray('Wallet:'), agent.walletAddress);
+        console.log(chalk.gray('Agent ID:'), agentData.agentId);
+        console.log(chalk.gray('API Key:'), agentData.apiKey);
+        console.log(chalk.gray('Wallet:'), agentData.wallet.address);
         console.log();
-        warn('Save your API key securely - it cannot be retrieved later!');
+        console.log(chalk.yellow('IMPORTANT: Save these credentials securely!'));
+        console.log(chalk.gray('Private Key:'), agentData.wallet.privateKey);
+        console.log(chalk.gray('Mnemonic:'), agentData.wallet.mnemonic);
+        console.log();
+        warn('These credentials cannot be retrieved later!');
       } catch (err) {
         error(err instanceof Error ? err.message : 'Failed to register agent');
       }
